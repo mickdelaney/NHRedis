@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 10.00
+# Visual Studio 2008
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Providers", "Providers", "{9BC335BB-4F31-44B4-9C2D-5A97B4742675}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{55271617-8CB8-4225-B338-069033160497}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NHibernate.Caches.Redis", "Redis\NHibernate.Cache.Redis\NHibernate.Caches.Redis.csproj", "{D0364A9F-4EBB-42AB-9895-28BDCD588DC3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NHibernate.Caches.Redis.Tests", "Redis\NHibernate.Caches.Redis.Tests\NHibernate.Caches.Redis.Tests.csproj", "{9550446F-B135-42B9-A30D-8FE664DA9493}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D0364A9F-4EBB-42AB-9895-28BDCD588DC3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D0364A9F-4EBB-42AB-9895-28BDCD588DC3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D0364A9F-4EBB-42AB-9895-28BDCD588DC3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D0364A9F-4EBB-42AB-9895-28BDCD588DC3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9550446F-B135-42B9-A30D-8FE664DA9493}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9550446F-B135-42B9-A30D-8FE664DA9493}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9550446F-B135-42B9-A30D-8FE664DA9493}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9550446F-B135-42B9-A30D-8FE664DA9493}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{D0364A9F-4EBB-42AB-9895-28BDCD588DC3} = {9BC335BB-4F31-44B4-9C2D-5A97B4742675}
+		{9550446F-B135-42B9-A30D-8FE664DA9493} = {55271617-8CB8-4225-B338-069033160497}
+	EndGlobalSection
+EndGlobal
