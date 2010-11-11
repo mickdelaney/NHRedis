@@ -1,0 +1,4 @@
+NHibernate cache provider using Redis. 
+
+Please note: this has NOT been tested in production. 
+You have been warned.
