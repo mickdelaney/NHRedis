@@ -27,6 +27,7 @@
 using System.Xml;
 using NUnit.Framework;
 
+
 namespace NHibernate.Caches.Redis.Tests
 {
 	[TestFixture]
@@ -47,7 +48,7 @@ namespace NHibernate.Caches.Redis.Tests
 
 		private RedisSectionHandler handler;
 		private XmlNode section;
-		private string xml = "<redis><redis host=\"192.168.1.105\" port=\"11211\" /></redis>";
+        private string xml = "<redis><redis host=\"142.223.144.62\" port=\"6379\" /></redis>";
 
 		[Test]
 		public void TestGetConfigFromFile()

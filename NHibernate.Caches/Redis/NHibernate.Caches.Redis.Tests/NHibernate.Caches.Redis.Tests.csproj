@@ -63,13 +63,13 @@
     <Compile Include="RedisSectionHandlerFixture.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\NHibernate.Cache.Redis\NHibernate.Caches.Redis.csproj">
+    <None Include="App.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NHibernate.Caches.Redis\NHibernate.Caches.Redis.csproj">
       <Project>{D0364A9F-4EBB-42AB-9895-28BDCD588DC3}</Project>
       <Name>NHibernate.Caches.Redis</Name>
     </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="App.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

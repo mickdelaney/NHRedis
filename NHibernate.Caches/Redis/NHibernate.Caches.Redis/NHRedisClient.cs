@@ -52,6 +52,7 @@ namespace NHibernate.Caches.Redis
         System.IO.MemoryStream _memoryStream = new System.IO.MemoryStream(1024);
         BinaryFormatter bf = new BinaryFormatter();
 
+
 		static NHRedisClient()
 		{
 			log = LoggerProvider.LoggerFor(typeof (RedisClient));
@@ -152,23 +153,12 @@ namespace NHibernate.Caches.Redis
 				return null;
 			}
 
-
             _memoryStream.Seek(0, 0);
             _memoryStream.Write(maybeObj, 0, maybeObj.Length);
-            _memoryStream.Seek(0, 0);
-   
-            DictionaryEntry de = (DictionaryEntry)bf.Deserialize(_memoryStream);
-            _memoryStream.Seek(0, 0);
 
-			//we need to check here that the key that we stored is really the key that we got
-			//the reason is that for long keys, we hash the value, and this mean that we may get
-			//hash collisions. The chance is very low, but it is better to be safe
-			string checkKeyHash = GetAlternateKeyHash(key);
-			if (checkKeyHash.Equals(de.Key))
-			{
-				return de.Value;
-			}
-			return null;
+            _memoryStream.Seek(0, 0);
+             DictionaryEntry de = (DictionaryEntry)bf.Deserialize(_memoryStream);
+			return de.Value;
 		}
 
 		public void Put(object key, object value)
@@ -186,7 +176,7 @@ namespace NHibernate.Caches.Redis
 			{
 				log.DebugFormat("setting value for item {0}", key);
 			}
-            var dictEntry = new DictionaryEntry(GetAlternateKeyHash(key), value);
+            var dictEntry = new DictionaryEntry(null, value);
 
             _memoryStream.Seek(0, 0);
             bf.Serialize(_memoryStream, dictEntry);
@@ -195,21 +185,14 @@ namespace NHibernate.Caches.Redis
             client.SetEx(KeyAsString(key), expiry, bytes);
 
             //todo: check for failure
-
             /*
-			bool returnOk = client.SetEntry(
-				KeyAsString(key),
-				new DictionaryEntry(GetAlternateKeyHash(key), value),
-				TimeSpan.FromSeconds(expiry));
-			if (!returnOk)
-			{
-				if (log.IsWarnEnabled)
-				{
-					log.WarnFormat("could not save: {0} => {1}", key, value);
-				}
-			}
+            if (log.IsWarnEnabled)
+            {
+                log.WarnFormat("could not save: {0} => {1}", key, value);
+            }
             */
-		}
+
+    	}
 
 		public void Remove(object key)
 		{
@@ -277,51 +260,7 @@ namespace NHibernate.Caches.Redis
 		/// </summary>
 		private string KeyAsString(object key)
 		{
-			string fullKey = FullKeyAsString(key);
-			if (fullKey.Length >= 250) //max key size for memcache
-			{
-				return ComputeHash(fullKey, Hasher);
-			}
-			return fullKey.Replace(' ', '-');
-		}
-
-		/// <summary>
-		/// Turn the key object into a human readable string.
-		/// </summary>
-		/// <param name="key"></param>
-		/// <returns></returns>
-		private string FullKeyAsString(object key)
-		{
-			return string.Format("{0}{1}@{2}", regionPrefix, region, (key == null ? string.Empty : key.ToString()));
-		}
-
-		/// <summary>
-		/// Compute the hash of the full key string using the given hash algorithm
-		/// </summary>
-		/// <param name="fullKeyString">The full key return by call FullKeyAsString</param>
-		/// <param name="hashAlgorithm">The hash algorithm used to hash the key</param>
-		/// <returns>The hashed key as a string</returns>
-		private static string ComputeHash(string fullKeyString, HashAlgorithm hashAlgorithm)
-		{
-			byte[] bytes = Encoding.ASCII.GetBytes(fullKeyString);
-			byte[] computedHash = hashAlgorithm.ComputeHash(bytes);
-			return Convert.ToBase64String(computedHash);
-		}
-
-		/// <summary>
-		/// Compute an alternate key hash; used as a check that the looked-up value is 
-		/// in fact what has been put there in the first place.
-		/// </summary>
-		/// <param name="key"></param>
-		/// <returns>The alternate key hash (using the MD5 algorithm)</returns>
-		private string GetAlternateKeyHash(object key)
-		{
-			string fullKey = FullKeyAsString(key);
-			if (fullKey.Length >= 250)
-			{
-				return ComputeHash(fullKey, Md5);
-			}
-			return fullKey.Replace(' ', '-');
+            return key.ToString();
 		}
 	}
 }
