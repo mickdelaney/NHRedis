@@ -107,8 +107,8 @@ namespace NHibernate.Caches.Redis
                 {
 
                     RedisClientManagerConfig poolConfig = new RedisClientManagerConfig();
-                    poolConfig.MaxReadPoolSize = 1;
-                    poolConfig.MaxWritePoolSize = 1;
+                    poolConfig.MaxReadPoolSize = config.MaxReadPoolSize;
+                    poolConfig.MaxWritePoolSize = config.MaxWritePoolSize;
 
                     List<string> readWrite = new List<string>() { config.Host };
                     clientManager = new PooledRedisClientManager(new List<string>() { config.Host },

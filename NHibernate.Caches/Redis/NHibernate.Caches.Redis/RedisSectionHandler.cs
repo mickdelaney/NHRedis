@@ -57,6 +57,8 @@ namespace NHibernate.Caches.Redis
   
                     XmlAttribute h = node.Attributes["host"];
                     XmlAttribute p = node.Attributes["port"];
+                    XmlAttribute maxReadPoolSize = node.Attributes["maxReadPoolSize"];
+                    XmlAttribute maxWritePoolSize = node.Attributes["maxWritePoolSize"];
                     if (h == null || p == null)
                     {
                         if (log.IsWarnEnabled)
@@ -66,12 +68,21 @@ namespace NHibernate.Caches.Redis
                     } else 
                     {
                         string host = h.Value;
-                        int port = ((string.IsNullOrEmpty(p.Value)) ? 0 : Convert.ToInt32(p.Value));
-                        config = new RedisConfig(host, port);
+                        config = new RedisConfig(host, parseInt(p));
+                        if (maxReadPoolSize != null)
+                            config.MaxReadPoolSize = parseInt(maxReadPoolSize);
+                        if (maxWritePoolSize != null)
+                            config.MaxWritePoolSize = parseInt(maxWritePoolSize);
+
                     }
             }
             return config;
 		}
+
+        private int parseInt(XmlAttribute attr)
+        {
+            return ((string.IsNullOrEmpty(attr.Value)) ? 0 : Convert.ToInt32(attr.Value));
+        }
 
 		#endregion
 	}
