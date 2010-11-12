@@ -41,14 +41,14 @@ namespace NHibernate.Caches.Redis
 	public class NHRedisClient : ICache
 	{
 		private static readonly IInternalLogger log;
-		[ThreadStatic] private static HashAlgorithm hasher;
-
-		[ThreadStatic] private static MD5 md5;
         private readonly PooledRedisClientManager clientManager;
 		private readonly int expiry;
 
 		private readonly string region;
 		private readonly string regionPrefix = "";
+
+        System.IO.MemoryStream _memoryStream = new System.IO.MemoryStream(1024);
+        BinaryFormatter bf = new BinaryFormatter();
 
 
 
@@ -109,30 +109,6 @@ namespace NHibernate.Caches.Redis
 			}
 		}
 
-		private static HashAlgorithm Hasher
-		{
-			get
-			{
-				if (hasher == null)
-				{
-					hasher = HashAlgorithm.Create();
-				}
-				return hasher;
-			}
-		}
-
-		private static MD5 Md5
-		{
-			get
-			{
-				if (md5 == null)
-				{
-					md5 = MD5.Create();
-				}
-				return md5;
-			}
-		}
-
 		#region ICache Members
 
 		public object Get(object key)
@@ -146,14 +122,11 @@ namespace NHibernate.Caches.Redis
 				log.DebugFormat("fetching object {0} from the cache", key);
 			}
             byte[] maybeObj = null;
-            string k = KeyAsString(key);
-
             RedisNativeClient client = null;
-
             try
             {
                 client = acquireClient();
-                maybeObj = client.Get(k);
+                maybeObj = client.Get(key.ToString());
             }
             catch (Exception)
             {
@@ -171,8 +144,7 @@ namespace NHibernate.Caches.Redis
 				return null;
 			}
 
-            System.IO.MemoryStream _memoryStream = new System.IO.MemoryStream(1024);
-            BinaryFormatter bf = new BinaryFormatter();
+            _memoryStream.Seek(0, 0);
             _memoryStream.Write(maybeObj, 0, maybeObj.Length);
 
             _memoryStream.Seek(0, 0);
@@ -196,17 +168,14 @@ namespace NHibernate.Caches.Redis
 				log.DebugFormat("setting value for item {0}", key);
 			}
             var dictEntry = new DictionaryEntry(null, value);
-
-            System.IO.MemoryStream _memoryStream = new System.IO.MemoryStream(1024);
-            BinaryFormatter bf = new BinaryFormatter();
+            _memoryStream.Seek(0, 0);
             bf.Serialize(_memoryStream, dictEntry);
             byte[] bytes = _memoryStream.GetBuffer();
-            string k = KeyAsString(key);
             RedisNativeClient client = null;
             try
             {
                 client = acquireClient();
-                client.SetEx(k, expiry, bytes);
+                client.SetEx(key.ToString(), expiry, bytes);
             }
             catch (Exception)
             {
@@ -230,12 +199,11 @@ namespace NHibernate.Caches.Redis
 			{
 				log.DebugFormat("removing item {0}", key);
 			}
-            string k = KeyAsString(key);
             RedisNativeClient client = null;
             try
             {
                 client = acquireClient();
-                client.Del(k);
+                client.Del(key.ToString());
             }
             catch (Exception)
             {
@@ -310,14 +278,6 @@ namespace NHibernate.Caches.Redis
 			return result;
 		}
 
-		/// <summary>
-		/// Turn the key obj into a string, preperably using human readable
-		/// string, and if the string is too long (>=250) it will be hashed
-		/// </summary>
-		private string KeyAsString(object key)
-		{
-            return key.ToString();
-		}
         private RedisNativeClient acquireClient()
         {
             return ((RedisNativeClient)clientManager.GetClient());
