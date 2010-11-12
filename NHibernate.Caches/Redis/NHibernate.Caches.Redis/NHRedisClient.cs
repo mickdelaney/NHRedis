@@ -47,12 +47,7 @@ namespace NHibernate.Caches.Redis
 		private readonly string region;
 		private readonly string regionPrefix = "";
 
-        System.IO.MemoryStream _memoryStream = new System.IO.MemoryStream(1024);
-        BinaryFormatter bf = new BinaryFormatter();
-
-
-
-		static NHRedisClient()
+ 		static NHRedisClient()
 		{
 			log = LoggerProvider.LoggerFor(typeof (RedisClient));
 		}
@@ -144,11 +139,20 @@ namespace NHibernate.Caches.Redis
 				return null;
 			}
 
-            _memoryStream.Seek(0, 0);
+            System.IO.MemoryStream _memoryStream = new System.IO.MemoryStream(1024);
+            BinaryFormatter bf = new BinaryFormatter();
             _memoryStream.Write(maybeObj, 0, maybeObj.Length);
-
             _memoryStream.Seek(0, 0);
-             DictionaryEntry de = (DictionaryEntry)bf.Deserialize(_memoryStream);
+            DictionaryEntry de;
+            try
+            {
+                de = (DictionaryEntry)bf.Deserialize(_memoryStream);
+            }
+            catch (SerializationException)
+            {
+                
+                throw;
+            }
 			return de.Value;
 		}
 
@@ -168,8 +172,17 @@ namespace NHibernate.Caches.Redis
 				log.DebugFormat("setting value for item {0}", key);
 			}
             var dictEntry = new DictionaryEntry(null, value);
-            _memoryStream.Seek(0, 0);
-            bf.Serialize(_memoryStream, dictEntry);
+            System.IO.MemoryStream _memoryStream = new System.IO.MemoryStream(1024);
+            BinaryFormatter bf = new BinaryFormatter();
+            try
+            {
+                bf.Serialize(_memoryStream, dictEntry);
+            }
+            catch (SerializationException)
+            {
+                
+                throw;
+            }
             byte[] bytes = _memoryStream.GetBuffer();
             RedisNativeClient client = null;
             try
