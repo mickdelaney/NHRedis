@@ -44,13 +44,12 @@ namespace NHibernate.Caches.Redis
 		[ThreadStatic] private static HashAlgorithm hasher;
 
 		[ThreadStatic] private static MD5 md5;
-        private readonly IRedisNativeClient client;
+        private readonly PooledRedisClientManager clientManager;
 		private readonly int expiry;
 
 		private readonly string region;
 		private readonly string regionPrefix = "";
-        System.IO.MemoryStream _memoryStream = new System.IO.MemoryStream(1024);
-        BinaryFormatter bf = new BinaryFormatter();
+
 
 
 		static NHRedisClient()
@@ -69,16 +68,15 @@ namespace NHibernate.Caches.Redis
 		}
 
 		public NHRedisClient(string regionName, IDictionary<string, string> properties)
-			: this(regionName, properties, new RedisNativeClient())
+			: this(regionName, properties, new PooledRedisClientManager())
 		{
 		}
 
-        public NHRedisClient(string regionName, IDictionary<string, string> properties, IRedisNativeClient redisClient)
+        public NHRedisClient(string regionName, IDictionary<string, string> properties, PooledRedisClientManager manager)
 		{
 			region = regionName;
 
-			client = redisClient;
-
+            clientManager = manager;
 			expiry = 300;
 
 			if (properties != null)
@@ -147,13 +145,34 @@ namespace NHibernate.Caches.Redis
 			{
 				log.DebugFormat("fetching object {0} from the cache", key);
 			}
-			byte[] maybeObj = client.Get(KeyAsString(key));
+            byte[] maybeObj = null;
+            string k = KeyAsString(key);
+
+            RedisNativeClient client = null;
+
+            try
+            {
+                client = acquireClient();
+                maybeObj = client.Get(k);
+            }
+            catch (Exception)
+            {
+
+
+            }
+            finally
+            {
+                releaseClient(client);
+            }
+           
+
 			if (maybeObj == null)
 			{
 				return null;
 			}
 
-            _memoryStream.Seek(0, 0);
+            System.IO.MemoryStream _memoryStream = new System.IO.MemoryStream(1024);
+            BinaryFormatter bf = new BinaryFormatter();
             _memoryStream.Write(maybeObj, 0, maybeObj.Length);
 
             _memoryStream.Seek(0, 0);
@@ -178,21 +197,28 @@ namespace NHibernate.Caches.Redis
 			}
             var dictEntry = new DictionaryEntry(null, value);
 
-            _memoryStream.Seek(0, 0);
+            System.IO.MemoryStream _memoryStream = new System.IO.MemoryStream(1024);
+            BinaryFormatter bf = new BinaryFormatter();
             bf.Serialize(_memoryStream, dictEntry);
             byte[] bytes = _memoryStream.GetBuffer();
-
-            client.SetEx(KeyAsString(key), expiry, bytes);
-
-            //todo: check for failure
-            /*
-            if (log.IsWarnEnabled)
+            string k = KeyAsString(key);
+            RedisNativeClient client = null;
+            try
+            {
+                client = acquireClient();
+                client.SetEx(k, expiry, bytes);
+            }
+            catch (Exception)
             {
                 log.WarnFormat("could not save: {0} => {1}", key, value);
-            }
-            */
 
-    	}
+            }
+            finally
+            {
+                releaseClient(client);
+            }
+
+       	}
 
 		public void Remove(object key)
 		{
@@ -204,12 +230,42 @@ namespace NHibernate.Caches.Redis
 			{
 				log.DebugFormat("removing item {0}", key);
 			}
-			client.Del(KeyAsString(key));
+            string k = KeyAsString(key);
+            RedisNativeClient client = null;
+            try
+            {
+                client = acquireClient();
+                client.Del(k);
+            }
+            catch (Exception)
+            {
+                log.WarnFormat("could not delete key: {0}", key);
+
+            }
+            finally
+            {
+                releaseClient(client);
+            }
+           
 		}
 
 		public void Clear()
 		{
-			client.FlushAll();
+            RedisNativeClient client = null;
+            try
+            {
+                client = acquireClient();
+                client.FlushAll();
+            }
+            catch (Exception)
+            {
+               
+
+            }
+            finally
+            {
+                releaseClient(client);
+            }
 		}
 
 		public void Destroy()
@@ -262,5 +318,13 @@ namespace NHibernate.Caches.Redis
 		{
             return key.ToString();
 		}
+        private RedisNativeClient acquireClient()
+        {
+            return ((RedisNativeClient)clientManager.GetClient());
+        }
+        private void releaseClient(RedisNativeClient activeClient)
+        {
+            clientManager.DisposeClient(activeClient);
+        }
 	}
 }

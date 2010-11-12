@@ -40,8 +40,8 @@ namespace NHibernate.Caches.Redis
 	public class RedisProvider : ICacheProvider
 	{
 		private static readonly IInternalLogger log;
-        private static IRedisNativeClient clientInstance;
 		private static readonly RedisConfig config;
+        private PooledRedisClientManager clientManager;
 		private static readonly object syncObject = new object();
 
 		static RedisProvider()
@@ -50,9 +50,10 @@ namespace NHibernate.Caches.Redis
             config = ConfigurationManager.GetSection("redis") as RedisConfig;
 			if (config == null)
 			{
-				log.Info("redis configuration section not found, using default configuration (127.0.0.1:11211).");
+				log.Info("redis configuration section not found, using default configuration (127.0.0.1:6379).");
 				config = new RedisConfig("localhost",6379);
     		}
+
 		}
 
 		#region ICacheProvider Members
@@ -80,7 +81,9 @@ namespace NHibernate.Caches.Redis
 				}
 				log.Debug("building cache with region: " + regionName + ", properties: " + sb);
 			}
-			return new NHRedisClient(regionName, properties, clientInstance);
+
+
+            return new NHRedisClient(regionName, properties, clientManager);
 		}
 
 		public long NextTimestamp()
@@ -98,10 +101,20 @@ namespace NHibernate.Caches.Redis
 				{
 					throw new ConfigurationErrorsException("Configuration for enyim.com/memcached not found");
 				}
-				if (clientInstance == null)
-				{
-					clientInstance = new RedisNativeClient(config.Host,config.Port);
-				}
+
+
+                if (clientManager == null)
+                {
+
+                    RedisClientManagerConfig poolConfig = new RedisClientManagerConfig();
+                    poolConfig.MaxReadPoolSize = 1;
+                    poolConfig.MaxWritePoolSize = 1;
+
+                    List<string> readWrite = new List<string>() { config.Host };
+                    clientManager = new PooledRedisClientManager(new List<string>() { config.Host },
+                                                    new List<string>(), poolConfig);
+
+                }
 			}
 		}
 
@@ -109,8 +122,8 @@ namespace NHibernate.Caches.Redis
 		{
 			lock (syncObject)
 			{
-				clientInstance.Dispose();
-				clientInstance = null;
+                clientManager.Dispose();
+                clientManager = null;
 			}
 		}
 

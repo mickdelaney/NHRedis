@@ -35,7 +35,10 @@ namespace NHibernate.Caches.Redis
         private int port_;
         // Create a configuration section.
         public RedisConfig()
-        { }
+        {
+            host_ = "localhost";
+            port_ = 6137;
+        }
 
         public RedisConfig(string host, int port)
         {
