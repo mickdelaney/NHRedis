@@ -172,6 +172,7 @@ namespace NHibernate.Caches.Redis
             catch (Exception)
             {
                 log.WarnFormat("could not get: {0}", key);
+                throw;
             }
             finally
             {
@@ -210,6 +211,7 @@ namespace NHibernate.Caches.Redis
             catch (Exception)
             {
                 log.WarnFormat("could not save: {0} => {1}", key, value);
+                throw;
 
             }
             finally
@@ -238,6 +240,7 @@ namespace NHibernate.Caches.Redis
             catch (Exception)
             {
                 log.WarnFormat("could not delete key: {0}", key);
+                throw;
 
             }
             finally
@@ -254,15 +257,16 @@ namespace NHibernate.Caches.Redis
             try
             {
                 client = acquireClient();
+                initGeneration();
                 using (var trans = ((RedisClient)client).CreateTransaction())
                 {
-                    trans.QueueCommand(r => r.IncrementValue(cacheGroupGeneration));
+                     trans.QueueCommand(r => r.IncrementValue(cacheGroupGeneration));
                     string temp = "temp" + cacheGroupKeys;
                     trans.QueueCommand(r => r.Rename(cacheGroupKeys, temp));
-                    initGeneration();
                     trans.QueueCommand(r => r.AddItemToList(cacheGroupsToClean, temp + "," + cacheGeneration.ToString()));
                     trans.Commit();
-                    //increment the cache generation
+
+                    //increment the local value of the cache generation
                     cacheGeneration++;
                 }
             }
@@ -335,6 +339,8 @@ namespace NHibernate.Caches.Redis
 
         private IRedisClient acquireClient()
         {
+            if (clientManager == null)
+                throw new Exception("acquireClient: clientManager is null");
             return clientManager.GetClient();
         }
         private void releaseClient(IRedisClient activeClient)
