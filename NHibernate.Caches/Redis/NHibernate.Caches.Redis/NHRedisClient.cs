@@ -44,10 +44,9 @@ namespace NHibernate.Caches.Redis
         private readonly PooledRedisClientManager clientManager;
 		private readonly int expiry;
 
+        // NHibernate settings for cache region and prefix
 		private readonly string region;
 		private readonly string regionPrefix;
-        private readonly string cacheGroup;
-        private int cacheGeneration = 0;
 
         private static readonly string separatorOuter = "#";
         private static readonly string separatorInner = "?";
@@ -58,9 +57,26 @@ namespace NHibernate.Caches.Redis
         //??
         private static readonly string separatorInnerSanitizer = separatorInner + separatorInner;
 
-        // group names that have only a single separatorInner character in them, 
-        // and that do not end with separatorOuter + separatorInner,
+        // group names that have only single separatorInner characters in them,
+        // and do not end with separatorOuter separatorInner,
         // are valid, reserved group names
+
+        // cache generation - generation changes when cache region is deleted
+        private int cacheGeneration=-1;
+        
+        //sanitized name for cache group (includes prefix and generation)
+        private readonly string cacheGroup;
+        
+        //reserved, unique name for meta entries for this cache group
+        private readonly string reservedCacheGroup;
+
+        // key for set of cache group keys
+        private readonly string cacheGroupKeys;
+
+        // key for cache group generation
+        private readonly string cacheGroupGeneration;
+
+        private readonly string cacheGroupsToClean = separatorInner + "NHIBERNATE_REDIS_CACHE_GROUPS_TO_CLEAN" + separatorInner;
 
  		static NHRedisClient()
 		{
@@ -78,7 +94,7 @@ namespace NHibernate.Caches.Redis
 		}
 
 		public NHRedisClient(string regionName, IDictionary<string, string> properties)
-			: this(regionName, properties, new PooledRedisClientManager())
+			: this(regionName, properties, null)
 		{
 		}
 
@@ -120,7 +136,18 @@ namespace NHibernate.Caches.Redis
 					}
 				}
 			}
+
             cacheGroup = sanitize(cacheGroup);
+
+            //no sanitized string can have an odd-length substring of separatorInner characters
+            reservedCacheGroup = separatorInner + cacheGroup;
+
+            cacheGroupKeys = reservedCacheGroup;
+            
+            //get generation
+            cacheGroupGeneration = reservedCacheGroup + "_" + "generation";
+            if (clientManager != null)
+                cacheGeneration = getGeneration();
 		}
 
 		#region ICache Members
@@ -136,7 +163,7 @@ namespace NHibernate.Caches.Redis
 				log.DebugFormat("fetching object {0} from the cache", key);
 			}
             byte[] maybeObj = null;
-            RedisNativeClient client = null;
+            IRedisClient client = null;
             try
             {
                 client = acquireClient();
@@ -151,19 +178,11 @@ namespace NHibernate.Caches.Redis
                 releaseClient(client);
             }
            
-
 			if (maybeObj == null)
 			{
 				return null;
 			}
-
-            System.IO.MemoryStream _memoryStream = new System.IO.MemoryStream(1024);
-            BinaryFormatter bf = new BinaryFormatter();
-            _memoryStream.Write(maybeObj, 0, maybeObj.Length);
-            _memoryStream.Seek(0, 0);
-            DictionaryEntry de = (DictionaryEntry)bf.Deserialize(_memoryStream);
-   		    
-            return de.Value;
+            return deSerialize(maybeObj);
 		}
 
 		public void Put(object key, object value)
@@ -181,12 +200,8 @@ namespace NHibernate.Caches.Redis
 			{
 				log.DebugFormat("setting value for item {0}", key);
 			}
-            var dictEntry = new DictionaryEntry(null, value);
-            System.IO.MemoryStream _memoryStream = new System.IO.MemoryStream(1024);
-            BinaryFormatter bf = new BinaryFormatter();
-            bf.Serialize(_memoryStream, dictEntry);
-            byte[] bytes = _memoryStream.GetBuffer();
-            RedisNativeClient client = null;
+            byte[] bytes = serialize(value);
+            IRedisClient client = null;
             try
             {
                 client = acquireClient();
@@ -214,7 +229,7 @@ namespace NHibernate.Caches.Redis
 			{
 				log.DebugFormat("removing item {0}", key);
 			}
-            RedisNativeClient client = null;
+            IRedisClient client = null;
             try
             {
                 client = acquireClient();
@@ -234,11 +249,22 @@ namespace NHibernate.Caches.Redis
 
 		public void Clear()
 		{
-            RedisNativeClient client = null;
+            //rename set of keys, and start expiring the keys
+            IRedisClient client = null;
             try
             {
                 client = acquireClient();
-                client.FlushAll();
+                using (var trans = ((RedisClient)client).CreateTransaction())
+                {
+                    trans.QueueCommand(r => r.IncrementValue(cacheGroupGeneration));
+                    string temp = "temp" + cacheGroupKeys;
+                    trans.QueueCommand(r => r.Rename(cacheGroupKeys, temp));
+                    initGeneration();
+                    trans.QueueCommand(r => r.AddItemToList(cacheGroupsToClean, temp + "," + cacheGeneration.ToString()));
+                    trans.Commit();
+                    //increment the cache generation
+                    cacheGeneration++;
+                }
             }
             finally
             {
@@ -278,6 +304,25 @@ namespace NHibernate.Caches.Redis
 
 		#endregion
 
+        private byte[] serialize(object value)
+        {
+            var dictEntry = new DictionaryEntry(null, value);
+            System.IO.MemoryStream memoryStream = new System.IO.MemoryStream(1024);
+            BinaryFormatter bf = new BinaryFormatter();
+            bf.Serialize(memoryStream, dictEntry);
+            return memoryStream.GetBuffer();
+        }
+
+        private object deSerialize(byte[] someBytes)
+        {
+            System.IO.MemoryStream _memoryStream = new System.IO.MemoryStream(1024);
+            BinaryFormatter bf = new BinaryFormatter();
+            _memoryStream.Write(someBytes, 0, someBytes.Length);
+            _memoryStream.Seek(0, 0);
+            DictionaryEntry de = (DictionaryEntry)bf.Deserialize(_memoryStream);
+            return de.Value;
+        }
+
 		private static string GetExpirationString(IDictionary<string, string> props)
 		{
 			string result;
@@ -288,14 +333,15 @@ namespace NHibernate.Caches.Redis
 			return result;
 		}
 
-        private RedisNativeClient acquireClient()
+        private IRedisClient acquireClient()
         {
-            return ((RedisNativeClient)clientManager.GetClient());
+            return clientManager.GetClient();
         }
-        private void releaseClient(RedisNativeClient activeClient)
+        private void releaseClient(IRedisClient activeClient)
         {
-            clientManager.DisposeClient(activeClient);
+            clientManager.DisposeClient((RedisNativeClient)activeClient);
         }
+
         private string sanitize(string dirtyString)
         {
             if (dirtyString == null)
@@ -318,8 +364,38 @@ namespace NHibernate.Caches.Redis
         }
         private string globalKey(object key)
         {
+            initGeneration();
             return globalKey(cacheGroup, cacheGeneration, key);
         }
-         
+        private int getGeneration()
+        {
+            int rc = 0;
+            IRedisClient client = null;
+            try
+            {
+                client = acquireClient();
+                string val = client.GetValue(cacheGroupGeneration);
+                if (val == null)
+                {
+                    client.IncrementValue(cacheGroupGeneration);
+                }
+                else
+                {
+                    rc = Convert.ToInt32(val);
+                }
+            }
+            finally
+            {
+                releaseClient(client);
+            }
+            return rc;
+        }
+        private void initGeneration()
+        {
+            if (cacheGeneration == -1)
+            {
+                cacheGeneration = getGeneration();
+            }
+        }
 	}
 }
