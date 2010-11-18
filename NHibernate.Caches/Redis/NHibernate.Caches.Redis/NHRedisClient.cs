@@ -45,12 +45,27 @@ namespace NHibernate.Caches.Redis
 		private readonly int expiry;
 
 		private readonly string region;
-		private readonly string regionPrefix = "";
+		private readonly string regionPrefix;
+        private readonly string cacheGroup;
+        private int cacheGeneration = 0;
+
+        private static readonly string separatorOuter = "#";
+        private static readonly string separatorInner = "?";
+
+        //#?#
+        private static readonly string regionKeySeparator = separatorOuter + separatorInner + separatorOuter;
+
+        //??
+        private static readonly string separatorInnerSanitizer = separatorInner + separatorInner;
+
+        // group names that have only a single separatorInner character in them, 
+        // and that do not end with separatorOuter + separatorInner,
+        // are valid, reserved group names
 
  		static NHRedisClient()
 		{
 			log = LoggerProvider.LoggerFor(typeof (RedisClient));
-		}
+ 		}
 
 		public NHRedisClient()
 			: this("nhibernate", null)
@@ -70,6 +85,7 @@ namespace NHibernate.Caches.Redis
         public NHRedisClient(string regionName, IDictionary<string, string> properties, PooledRedisClientManager manager)
 		{
 			region = regionName;
+            cacheGroup = region;
 
             clientManager = manager;
 			expiry = 300;
@@ -89,19 +105,22 @@ namespace NHibernate.Caches.Redis
 				if (properties.ContainsKey("regionPrefix"))
 				{
 					regionPrefix = properties["regionPrefix"];
+                    if (regionPrefix != null && !regionPrefix.Equals(""))
+                        cacheGroup = regionPrefix + "_" + region;
 					if (log.IsDebugEnabled)
 					{
 						log.DebugFormat("new regionPrefix :{0}", regionPrefix);
 					}
-				}
+        		}
 				else
 				{
-					if (log.IsDebugEnabled)
+                   	if (log.IsDebugEnabled)
 					{
 						log.Debug("no regionPrefix value given, using defaults");
 					}
 				}
 			}
+            cacheGroup = sanitize(cacheGroup);
 		}
 
 		#region ICache Members
@@ -121,12 +140,11 @@ namespace NHibernate.Caches.Redis
             try
             {
                 client = acquireClient();
-                maybeObj = client.Get(key.ToString());
+                maybeObj = client.Get(globalKey(key));
             }
             catch (Exception)
             {
-
-
+                log.WarnFormat("could not get: {0}", key);
             }
             finally
             {
@@ -143,17 +161,9 @@ namespace NHibernate.Caches.Redis
             BinaryFormatter bf = new BinaryFormatter();
             _memoryStream.Write(maybeObj, 0, maybeObj.Length);
             _memoryStream.Seek(0, 0);
-            DictionaryEntry de;
-            try
-            {
-                de = (DictionaryEntry)bf.Deserialize(_memoryStream);
-            }
-            catch (SerializationException)
-            {
-                
-                throw;
-            }
-			return de.Value;
+            DictionaryEntry de = (DictionaryEntry)bf.Deserialize(_memoryStream);
+   		    
+            return de.Value;
 		}
 
 		public void Put(object key, object value)
@@ -174,21 +184,13 @@ namespace NHibernate.Caches.Redis
             var dictEntry = new DictionaryEntry(null, value);
             System.IO.MemoryStream _memoryStream = new System.IO.MemoryStream(1024);
             BinaryFormatter bf = new BinaryFormatter();
-            try
-            {
-                bf.Serialize(_memoryStream, dictEntry);
-            }
-            catch (SerializationException)
-            {
-                
-                throw;
-            }
+            bf.Serialize(_memoryStream, dictEntry);
             byte[] bytes = _memoryStream.GetBuffer();
             RedisNativeClient client = null;
             try
             {
                 client = acquireClient();
-                client.SetEx(key.ToString(), expiry, bytes);
+                client.SetEx(globalKey(key), expiry, bytes);
             }
             catch (Exception)
             {
@@ -216,7 +218,7 @@ namespace NHibernate.Caches.Redis
             try
             {
                 client = acquireClient();
-                client.Del(key.ToString());
+                client.Del(globalKey(key));
             }
             catch (Exception)
             {
@@ -237,11 +239,6 @@ namespace NHibernate.Caches.Redis
             {
                 client = acquireClient();
                 client.FlushAll();
-            }
-            catch (Exception)
-            {
-               
-
             }
             finally
             {
@@ -299,5 +296,30 @@ namespace NHibernate.Caches.Redis
         {
             clientManager.DisposeClient(activeClient);
         }
+        private string sanitize(string dirtyString)
+        {
+            if (dirtyString == null)
+                return null;
+            return dirtyString.Replace(separatorInner, separatorInnerSanitizer);
+
+        }
+        private string sanitize(object dirtyString)
+        {
+            return sanitize(dirtyString.ToString());
+        }
+        //group should already be sanitizd
+        //key is not expected to be sanitized
+        private string globalKey(string group, int generation, object key)
+        {
+            string rc = sanitize(key);
+            if (group != null && !group.Equals(""))
+                rc =  group + "_" + generation.ToString() + regionKeySeparator + rc;
+            return rc;
+        }
+        private string globalKey(object key)
+        {
+            return globalKey(cacheGroup, cacheGeneration, key);
+        }
+         
 	}
 }
