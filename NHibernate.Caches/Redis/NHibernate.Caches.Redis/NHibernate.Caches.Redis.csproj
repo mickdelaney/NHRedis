@@ -60,6 +60,7 @@
   <ItemGroup>
     <Compile Include="NHRedisClient.cs" />
     <Compile Include="RedisConfig.cs" />
+    <Compile Include="RedisGarbageCollector.cs" />
     <Compile Include="RedisNamespace.cs" />
     <Compile Include="RedisProvider.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

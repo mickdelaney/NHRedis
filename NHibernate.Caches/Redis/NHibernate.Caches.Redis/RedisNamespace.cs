@@ -1,12 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
+
+
 
 namespace NHibernate.Caches.Redis
 {
     public class RedisNamespace
     {
+
         private static readonly string separatorOuter = "#";
         private static readonly string separatorInner = "?";
 
@@ -51,6 +53,8 @@ namespace NHibernate.Caches.Redis
             namespaceGenerationKey = namespaceReservedName + "_" + "generation";
 
         }
+
+
 
         public int getGeneration()
         {
