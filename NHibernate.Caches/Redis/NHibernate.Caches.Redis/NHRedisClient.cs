@@ -49,6 +49,7 @@ namespace NHibernate.Caches.Redis
 		private readonly string regionPrefix;
 
         private RedisNamespace cacheNamespace;
+ 
 
    		static NHRedisClient()
 		{
@@ -226,7 +227,7 @@ namespace NHibernate.Caches.Redis
                      trans.QueueCommand(r => r.IncrementValue(cacheNamespace.getGenerationKey()));
                      string temp = "temp" + cacheNamespace.getNamespaceKeysKey();
                      trans.QueueCommand(r => r.Rename(cacheNamespace.getNamespaceKeysKey(), temp));
-                    trans.QueueCommand(r => r.AddItemToList(RedisNamespace.namespacesToCleanKey, temp + "," + cacheNamespace.getGeneration().ToString()));
+                    trans.QueueCommand(r => r.AddItemToList(RedisNamespace.namespacesGarbageKey, temp + "," + cacheNamespace.getGeneration().ToString()));
                     trans.Commit();
 
                     //increment the local value of the cache generation

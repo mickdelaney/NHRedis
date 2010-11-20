@@ -37,7 +37,7 @@ namespace NHibernate.Caches.Redis
         // key for set of namespace keys
         private readonly string namespaceKeysKey;
 
-        public static readonly string namespacesToCleanKey = separatorInner + "REDIS_NAMESPACES_TO_CLEAN" + separatorInner;
+        public static readonly string namespacesGarbageKey = separatorInner + "REDIS_NAMESPACES_GARBAGE" + separatorInner;
 
 
         public RedisNamespace(string name)

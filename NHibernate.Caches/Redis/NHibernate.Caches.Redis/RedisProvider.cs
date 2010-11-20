@@ -44,6 +44,9 @@ namespace NHibernate.Caches.Redis
         private PooledRedisClientManager clientManager;
 		private static readonly object syncObject = new object();
 
+        private static RedisGarbageCollector garbageCollector;
+
+
 		static RedisProvider()
 		{
 			log = LoggerProvider.LoggerFor(typeof (RedisProvider));
@@ -53,6 +56,7 @@ namespace NHibernate.Caches.Redis
 				log.Info("redis configuration section not found, using default configuration (127.0.0.1:6379).");
 				config = new RedisConfig("localhost",6379);
     		}
+            garbageCollector = new RedisGarbageCollector(config.Host, config.Port);
 
 		}
 
@@ -115,6 +119,7 @@ namespace NHibernate.Caches.Redis
                                                     new List<string>(), poolConfig);
 
                 }
+                garbageCollector.start();
 			}
 		}
 
@@ -124,6 +129,8 @@ namespace NHibernate.Caches.Redis
 			{
                 clientManager.Dispose();
                 clientManager = null;
+
+                garbageCollector.stop();
 			}
 		}
 
