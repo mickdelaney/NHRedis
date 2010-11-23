@@ -22,7 +22,7 @@ namespace NHibernate.Caches.Redis
         // and do not end with separatorOuter separatorInner,
         // are valid, reserved names
 
-        // namespace generation - generation changes when namespace is deleted
+        // namespace generation - generation changes namespace is slated for garbage collection
         private int namespaceGeneration = -1;
 
         // key for namespace generation
@@ -34,9 +34,11 @@ namespace NHibernate.Caches.Redis
         //reserved, unique name for meta entries for this namespace
         private readonly string namespaceReservedName;
 
-        // key for set of namespace keys
-        private readonly string namespaceKeysKey;
+        // key for set of all global keys in this namespace
+        private readonly string globalKeysKey;
 
+        // key for list keys slated for garbage collection
+        // (having two single separatorInner characters guarantees uniqueness for this key)
         public static readonly string namespacesGarbageKey = separatorInner + "REDIS_NAMESPACES_GARBAGE" + separatorInner;
 
 
@@ -47,7 +49,7 @@ namespace NHibernate.Caches.Redis
             //no sanitized string can have an odd-length substring of separatorInner characters
             namespaceReservedName = separatorInner + namespacePrefix;
 
-            namespaceKeysKey = namespaceReservedName;
+            globalKeysKey = namespaceReservedName;
 
             //get generation
             namespaceGenerationKey = namespaceReservedName + "_" + "generation";
@@ -74,9 +76,9 @@ namespace NHibernate.Caches.Redis
             return namespaceGenerationKey;
         }
 
-        public string getNamespaceKeysKey()
+        public string getGlobalKeysKey()
         {
-            return namespaceKeysKey;
+            return globalKeysKey;
         }
 
         public string globalKey(object key)

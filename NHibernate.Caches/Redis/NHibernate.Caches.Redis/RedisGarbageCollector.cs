@@ -35,11 +35,11 @@ namespace NHibernate.Caches.Redis
                 string listKey = client.BlockingPopItemFromList(RedisNamespace.namespacesGarbageKey, TimeSpan.FromSeconds(1));
                 if (listKey != null)
                 {
-                    string key = client.PopItemFromList(listKey);
+                    string key = client.PopItemFromSet(listKey);
                     while ( key != null && !shouldStop)
                     {
                         client.Expire(key, 0);
-                        key = client.PopItemFromList(listKey);
+                        key = client.PopItemFromSet(listKey);
                     }
                     client.Expire(listKey,0);
                }

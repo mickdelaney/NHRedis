@@ -195,8 +195,13 @@ namespace NHibernate.Caches.Redis
             IRedisNativeClient client = null;
             try
             {
+                // should this be in a transaction??
                 client = acquireClient();
-                client.SetEx(cacheNamespace.globalKey(key), expiry, bytes);
+                string globalKey = cacheNamespace.globalKey(key);
+                //add global (key,value)
+                client.SetEx(globalKey, expiry, bytes);
+                //add key to globalKeys set for this namespace
+                ((IRedisClient)client).AddItemToSet(cacheNamespace.getGlobalKeysKey(), globalKey); 
             }
             catch (Exception)
             {
@@ -251,9 +256,9 @@ namespace NHibernate.Caches.Redis
                 using (var trans = ((RedisClient)client).CreateTransaction())
                 {               
                      trans.QueueCommand(r => cacheNamespace.setGeneration( r.IncrementValue(cacheNamespace.getGenerationKey()))  );
-                     string temp = "temp" + cacheNamespace.getNamespaceKeysKey();
-                     trans.QueueCommand(r => ((RedisNativeClient)r).Rename(cacheNamespace.getNamespaceKeysKey(), temp));
-                    trans.QueueCommand(r => r.AddItemToList(RedisNamespace.namespacesGarbageKey, temp + "," + getGeneration().ToString()));
+                     string temp = "temp_" + cacheNamespace.getGlobalKeysKey() + "_" + getGeneration().ToString();
+                     trans.QueueCommand(r => ((RedisNativeClient)r).Rename(cacheNamespace.getGlobalKeysKey(), temp));
+                    trans.QueueCommand(r => r.AddItemToList(RedisNamespace.namespacesGarbageKey, temp));
                     trans.Commit();
                 }
             }
