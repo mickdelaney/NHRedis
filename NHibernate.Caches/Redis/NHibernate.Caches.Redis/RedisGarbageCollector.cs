@@ -7,10 +7,12 @@ using ServiceStack.Redis;
 
 namespace NHibernate.Caches.Redis
 {
+    /// <summary>
+    /// Garbage collection class. Runs its own thread, doing BLPOP on garbage key list, then deleting all keys in list
+    /// and then deleting list.
+    /// </summary>
     public class RedisGarbageCollector
     {
-        // clean-up thread
-
         private int gcRefCount = 0;
         private bool shouldStop = true;
         private Thread garbageThread;
@@ -28,7 +30,6 @@ namespace NHibernate.Caches.Redis
         {
             while (!shouldStop)
             {
-               // Console.WriteLine("worker thread: working...");
                 //BLPOP from garbage list
                 //run through keys, expiring all keys in list
                 string listKey = client.BlockingPopItemFromList(RedisNamespace.namespacesGarbageKey, TimeSpan.FromSeconds(1));
@@ -41,15 +42,11 @@ namespace NHibernate.Caches.Redis
                         key = client.PopItemFromList(listKey);
                     }
                     client.Expire(listKey,0);
-                  
-
-                }
-                
+               }
             }
-            Console.WriteLine("worker thread: terminating gracefully.");
         }
 
-
+        // start ye olde garbage collection thread
         public void start()
         {
             lock (this)
@@ -67,6 +64,7 @@ namespace NHibernate.Caches.Redis
             }
 
         }
+        //stop ye olde thread
         public void stop()
         {
             lock (this)
@@ -85,7 +83,6 @@ namespace NHibernate.Caches.Redis
 
                 }
             }
-
         }
     }
 }

@@ -38,6 +38,9 @@ using Environment = NHibernate.Cfg.Environment;
 
 namespace NHibernate.Caches.Redis
 {
+    /// <summary>
+    /// Redis cache client for Redis.
+    /// </summary>
 	public class NHRedisClient : ICache
 	{
 		private static readonly IInternalLogger log;
@@ -48,6 +51,7 @@ namespace NHibernate.Caches.Redis
 		private readonly string region;
 		private readonly string regionPrefix;
 
+        // manage cache region        
         private RedisNamespace cacheNamespace;
  
 
@@ -110,6 +114,8 @@ namespace NHibernate.Caches.Redis
 				}
 			}
             cacheNamespace = new RedisNamespace(namespacePrefix);
+
+            //make sure generation is synched with server
             synchGeneration();
 		}
 
@@ -134,7 +140,24 @@ namespace NHibernate.Caches.Redis
                 //if it succeeds, and null is returned, then either the key doesn't exist or
                 // our generation is out of date. In the latter case , update generation and try
                 // again.
-                maybeObj = client.Get(cacheNamespace.globalKey(key));
+                int generationFromServer = getGeneration();
+                while (true)
+                {
+                    using (var trans = ((RedisClient)client).CreateTransaction())
+                    {
+                        trans.QueueCommand(r => r.GetValue(cacheNamespace.getGenerationKey()), x => generationFromServer = Convert.ToInt32(x));
+                        trans.QueueCommand(r => ((RedisNativeClient)r).Get(cacheNamespace.globalKey(key)), x => maybeObj = x);
+                        trans.Commit();
+                    }
+                    if (generationFromServer != getGeneration())
+                    {
+                        //update cached generation value, and try again
+                        cacheNamespace.setGeneration(generationFromServer);
+                    }
+                    else
+                        break;
+                }
+
             }
             catch (Exception)
             {
@@ -216,7 +239,8 @@ namespace NHibernate.Caches.Redis
             }
            
 		}
-
+        // clear cache region: 
+        // 
 		public void Clear()
 		{
             //rename set of keys, and start expiring the keys
@@ -228,7 +252,7 @@ namespace NHibernate.Caches.Redis
                 {               
                      trans.QueueCommand(r => r.IncrementValue(cacheNamespace.getGenerationKey()));
                      string temp = "temp" + cacheNamespace.getNamespaceKeysKey();
-                     trans.QueueCommand(r => r.Rename(cacheNamespace.getNamespaceKeysKey(), temp));
+                     trans.QueueCommand(r => ((RedisNativeClient)r).Rename(cacheNamespace.getNamespaceKeysKey(), temp));
                     trans.QueueCommand(r => r.AddItemToList(RedisNamespace.namespacesGarbageKey, temp + "," + getGeneration().ToString()));
                     trans.Commit();
 
@@ -274,6 +298,7 @@ namespace NHibernate.Caches.Redis
 
 		#endregion
 
+        // serialize object to buffer
         private byte[] serialize(object value)
         {
             var dictEntry = new DictionaryEntry(null, value);
@@ -282,7 +307,7 @@ namespace NHibernate.Caches.Redis
             bf.Serialize(memoryStream, dictEntry);
             return memoryStream.GetBuffer();
         }
-
+        // deSerialize buffer to object
         private object deSerialize(byte[] someBytes)
         {
             System.IO.MemoryStream _memoryStream = new System.IO.MemoryStream(1024);
@@ -293,6 +318,7 @@ namespace NHibernate.Caches.Redis
             return de.Value;
         }
 
+        // get value for cache region expiry
 		private static string GetExpirationString(IDictionary<string, string> props)
 		{
 			string result;
@@ -303,22 +329,25 @@ namespace NHibernate.Caches.Redis
 			return result;
 		}
 
+        // acquire redis client from pool
         private IRedisNativeClient acquireClient()
         {
             if (clientManager == null)
                 throw new Exception("acquireClient: clientManager is null");
             return (IRedisNativeClient)clientManager.GetClient();
         }
+        // release redis client back to pool
         private void releaseClient(IRedisNativeClient activeClient)
         {
             clientManager.DisposeClient((RedisNativeClient)activeClient);
         }
-
+        // return cache region generation
         private int getGeneration()
         {
             synchGeneration();
             return cacheNamespace.getGeneration();
         }
+        // hit server for cache region generation
         private int fetchGeneration()
         {
             int rc = 0;
@@ -342,6 +371,7 @@ namespace NHibernate.Caches.Redis
             }
             return rc;
         }
+        // fetch generation value from redis server, if generation is uninitialized
         private void synchGeneration()
         {
             if (cacheNamespace.getGeneration() == -1 && clientManager != null)

@@ -31,70 +31,24 @@ namespace NHibernate.Caches.Redis
 {
     public class RedisConfig
     {
-        private string host_;
-        private int port_;
-        private int maxReadPoolSize_;
-        private int maxWritePoolSize_;
-
-        // Create a configuration section.
         public RedisConfig()
         {
-            host_ = "localhost";
-            port_ = 6137;
-            maxReadPoolSize_ = 1;
-            maxWritePoolSize_ = 1;
+            Host = "localhost";
+            Port = 6137;
+            MaxReadPoolSize = 1;
+            MaxWritePoolSize = 1;
         }
 
         public RedisConfig(string host, int port)
         {
-            host_ = host;
-            port_ = port;
+            Host = host;
+            Port = port;
         }
 
-        public string Host
-        {
-            get
-            {
-                return host_;
-            }
-            set
-            {
-                host_ = value;
-            }
-        }
-        public int Port
-        {
-            get
-            {
-                return port_;
-            }
-            set
-            {
-                port_ = value;
-            }
-        }
-        public int MaxReadPoolSize
-        {
-            get
-            {
-                return maxReadPoolSize_;
-            }
-            set
-            {
-                maxReadPoolSize_ = value;
-            }
-        }
-        public int MaxWritePoolSize
-        {
-            get
-            {
-                return maxWritePoolSize_;
-            }
-            set
-            {
-                maxWritePoolSize_ = value;
-            }
-        }
-    }
+        public string Host { get; set; }
+        public int Port { get; set; }
+        public int MaxReadPoolSize { get; set; }
+        public int MaxWritePoolSize { get; set; }
+    } 
 
 }
