@@ -31,17 +31,17 @@ namespace NHibernate.Caches.Redis
             while (!shouldStop)
             {
                 //BLPOP from garbage list
-                //run through keys, expiring all keys in list
-                string listKey = client.BlockingPopItemFromList(RedisNamespace.namespacesGarbageKey, TimeSpan.FromSeconds(1));
-                if (listKey != null)
+                //run through keys, expiring all keys in set
+                string garbageKeys = client.BlockingPopItemFromList(RedisNamespace.namespacesGarbageKey, TimeSpan.FromSeconds(1));
+                if (garbageKeys != null)
                 {
-                    string key = client.PopItemFromSet(listKey);
+                    string key = client.PopItemFromSet(garbageKeys);
                     while ( key != null && !shouldStop)
                     {
                         client.Expire(key, 0);
-                        key = client.PopItemFromSet(listKey);
+                        key = client.PopItemFromSet(garbageKeys);
                     }
-                    client.Expire(listKey,0);
+                    client.Expire(garbageKeys,0);
                }
             }
         }
