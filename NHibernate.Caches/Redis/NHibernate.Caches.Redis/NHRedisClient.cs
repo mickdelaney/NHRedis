@@ -250,14 +250,11 @@ namespace NHibernate.Caches.Redis
                 client = acquireClient();
                 using (var trans = ((RedisClient)client).CreateTransaction())
                 {               
-                     trans.QueueCommand(r => r.IncrementValue(cacheNamespace.getGenerationKey()));
+                     trans.QueueCommand(r => cacheNamespace.setGeneration( r.IncrementValue(cacheNamespace.getGenerationKey()))  );
                      string temp = "temp" + cacheNamespace.getNamespaceKeysKey();
                      trans.QueueCommand(r => ((RedisNativeClient)r).Rename(cacheNamespace.getNamespaceKeysKey(), temp));
                     trans.QueueCommand(r => r.AddItemToList(RedisNamespace.namespacesGarbageKey, temp + "," + getGeneration().ToString()));
                     trans.Commit();
-
-                    //increment the local value of the cache generation
-                    cacheNamespace.incrementGeneration();
                 }
             }
             finally
