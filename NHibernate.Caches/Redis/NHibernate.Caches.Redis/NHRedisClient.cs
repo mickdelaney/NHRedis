@@ -110,8 +110,7 @@ namespace NHibernate.Caches.Redis
 				}
 			}
             cacheNamespace = new RedisNamespace(namespacePrefix);
-            if (clientManager != null)
-                cacheNamespace.setGeneration(getGeneration());
+            synchGeneration();
 		}
 
 		#region ICache Members
@@ -131,7 +130,11 @@ namespace NHibernate.Caches.Redis
             try
             {
                 client = acquireClient();
-                maybeObj = client.Get(globalKey(key));
+                //do transactioned get of generation and value
+                //if it succeeds, and null is returned, then either the key doesn't exist or
+                // our generation is out of date. In the latter case , update generation and try
+                // again.
+                maybeObj = client.Get(cacheNamespace.globalKey(key));
             }
             catch (Exception)
             {
@@ -170,7 +173,7 @@ namespace NHibernate.Caches.Redis
             try
             {
                 client = acquireClient();
-                client.SetEx(globalKey(key), expiry, bytes);
+                client.SetEx(cacheNamespace.globalKey(key), expiry, bytes);
             }
             catch (Exception)
             {
@@ -199,7 +202,7 @@ namespace NHibernate.Caches.Redis
             try
             {
                 client = acquireClient();
-                client.Del(globalKey(key));
+                client.Del(cacheNamespace.globalKey(key));
             }
             catch (Exception)
             {
@@ -221,13 +224,12 @@ namespace NHibernate.Caches.Redis
             try
             {
                 client = acquireClient();
-                initGeneration();
                 using (var trans = ((RedisClient)client).CreateTransaction())
-                {
+                {               
                      trans.QueueCommand(r => r.IncrementValue(cacheNamespace.getGenerationKey()));
                      string temp = "temp" + cacheNamespace.getNamespaceKeysKey();
                      trans.QueueCommand(r => r.Rename(cacheNamespace.getNamespaceKeysKey(), temp));
-                    trans.QueueCommand(r => r.AddItemToList(RedisNamespace.namespacesGarbageKey, temp + "," + cacheNamespace.getGeneration().ToString()));
+                    trans.QueueCommand(r => r.AddItemToList(RedisNamespace.namespacesGarbageKey, temp + "," + getGeneration().ToString()));
                     trans.Commit();
 
                     //increment the local value of the cache generation
@@ -312,12 +314,12 @@ namespace NHibernate.Caches.Redis
             clientManager.DisposeClient((RedisNativeClient)activeClient);
         }
 
-        private string globalKey(object key)
-        {
-            initGeneration();
-            return cacheNamespace.globalKey(key);
-        }
         private int getGeneration()
+        {
+            synchGeneration();
+            return cacheNamespace.getGeneration();
+        }
+        private int fetchGeneration()
         {
             int rc = 0;
             IRedisClient client = null;
@@ -327,7 +329,7 @@ namespace NHibernate.Caches.Redis
                 string val = client.GetValue(cacheNamespace.getGenerationKey());
                 if (val == null)
                 {
-                    client.IncrementValue(cacheNamespace.getGenerationKey());
+                    client.Set<int>(cacheNamespace.getGenerationKey(),0);
                 }
                 else
                 {
@@ -340,11 +342,11 @@ namespace NHibernate.Caches.Redis
             }
             return rc;
         }
-        private void initGeneration()
+        private void synchGeneration()
         {
-            if (cacheNamespace.getGeneration() == -1)
+            if (cacheNamespace.getGeneration() == -1 && clientManager != null)
             {
-                cacheNamespace.setGeneration(getGeneration());
+                cacheNamespace.setGeneration(fetchGeneration());
             }
         }
 	}
