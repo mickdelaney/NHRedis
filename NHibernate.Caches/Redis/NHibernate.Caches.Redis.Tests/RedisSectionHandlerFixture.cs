@@ -38,34 +38,34 @@ namespace NHibernate.Caches.Redis.Tests
 		[SetUp]
 		public void Init()
 		{
-			handler = new RedisSectionHandler();
+			_handler = new RedisSectionHandler();
 			var doc = new XmlDocument();
-			doc.LoadXml(xml);
-			section = doc.DocumentElement;
+			doc.LoadXml(Xml);
+			_section = doc.DocumentElement;
 		}
 
 		#endregion
 
-		private RedisSectionHandler handler;
-		private XmlNode section;
-        private string xml = "<redis><redis host=\"142.223.144.62\" port=\"6379\" /></redis>";
+		private RedisSectionHandler _handler;
+		private XmlNode _section;
+        private const string Xml = "<redis><redis host=\"142.223.144.62\" port=\"6379\" /></redis>";
 
 		[Test]
 		public void TestGetConfigFromFile()
 		{
-			object result = handler.Create(null, null, section);
+			var result = _handler.Create(null, null, _section);
 			Assert.IsNotNull(result);
 			Assert.IsTrue(result is RedisConfig);
 		}
-/*
+
 		[Test]
 		public void TestGetConfigNullSection()
 		{
-			section = new XmlDocument();
-			object result = handler.Create(null, null, section);
+			_section = new XmlDocument();
+			var result = _handler.Create(null, null, _section);
 			Assert.IsNotNull(result);
             Assert.IsTrue(result is RedisConfig);
 		}
-*/
+
     }
 }

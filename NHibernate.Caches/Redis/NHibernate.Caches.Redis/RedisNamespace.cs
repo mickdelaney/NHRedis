@@ -9,95 +9,93 @@ namespace NHibernate.Caches.Redis
     public class RedisNamespace
     {
 
-        private static readonly string separatorOuter = "#";
-        private static readonly string separatorInner = "?";
+        private const string SeparatorOuter = "#";
+        private const string SeparatorInner = "?";
 
         //#?#
-        private static readonly string namespaceSeparator = separatorOuter + separatorInner + separatorOuter;
+        private const string NamespaceSeparator = SeparatorOuter + SeparatorInner + SeparatorOuter;
 
         //??
-        private static readonly string sanitizer = separatorInner + separatorInner;
+        private const string Sanitizer = SeparatorInner + SeparatorInner;
 
-        // strings that have only single separatorInner characters in them,
-        // and do not end with separatorOuter separatorInner,
+        // strings that have only single SeparatorInner characters in them,
+        // and do not end with SeparatorOuter SeparatorInner,
         // are valid, reserved names
 
         // namespace generation - generation changes namespace is slated for garbage collection
-        private int namespaceGeneration = -1;
+        private int _namespaceGeneration = -1;
 
         // key for namespace generation
-        private readonly string namespaceGenerationKey;
+        private readonly string _namespaceGenerationKey;
 
         //sanitized name for namespace (includes namespace generation)
-        private readonly string namespacePrefix;
+        private readonly string _namespacePrefix;
 
         //reserved, unique name for meta entries for this namespace
-        private readonly string namespaceReservedName;
+        private readonly string _namespaceReservedName;
 
         // key for set of all global keys in this namespace
-        private readonly string globalKeysKey;
+        private readonly string _globalKeysKey;
 
         // key for list keys slated for garbage collection
-        // (having two single separatorInner characters guarantees uniqueness for this key)
-        public static readonly string namespacesGarbageKey = separatorInner + "REDIS_NAMESPACES_GARBAGE" + separatorInner;
+        // (having two single SeparatorInner characters guarantees uniqueness for this key)
+        public static readonly string NamespacesGarbageKey = SeparatorInner + "REDIS_NAMESPACES_GARBAGE" + SeparatorInner;
 
 
         public RedisNamespace(string name)
         {
-            namespacePrefix = sanitize(name);
+            _namespacePrefix = Sanitize(name);
 
-            //no sanitized string can have an odd-length substring of separatorInner characters
-            namespaceReservedName = separatorInner + namespacePrefix;
+            //no sanitized string can have an odd-length substring of SeparatorInner characters
+            _namespaceReservedName = SeparatorInner + _namespacePrefix;
 
-            globalKeysKey = namespaceReservedName;
+            _globalKeysKey = _namespaceReservedName;
 
             //get generation
-            namespaceGenerationKey = namespaceReservedName + "_" + "generation";
+            _namespaceGenerationKey = _namespaceReservedName + "_" + "generation";
 
         }
 
 
 
-        public int getGeneration()
+        public int GetGeneration()
         {
-            return namespaceGeneration;
+            return _namespaceGeneration;
         }
-        public void setGeneration(int generation)
+        public void SetGeneration(int generation)
         {
-             namespaceGeneration = generation;
+             _namespaceGeneration = generation;
         }
-        public void incrementGeneration()
+        public void IncrementGeneration()
         {
-            namespaceGeneration++;
-        }
-
-        public string getGenerationKey()
-        {
-            return namespaceGenerationKey;
+            _namespaceGeneration++;
         }
 
-        public string getGlobalKeysKey()
+        public string GetGenerationKey()
         {
-            return globalKeysKey;
+            return _namespaceGenerationKey;
         }
 
-        public string globalKey(object key)
+        public string GetGlobalKeysKey()
         {
-            string rc = sanitize(key);
-            if (namespacePrefix != null && !namespacePrefix.Equals(""))
-                rc = namespacePrefix + "_" + namespaceGeneration.ToString() + namespaceSeparator + rc;
+            return _globalKeysKey;
+        }
+
+        public string GlobalKey(object key)
+        {
+            var rc = Sanitize(key);
+            if (_namespacePrefix != null && !_namespacePrefix.Equals(""))
+                rc = _namespacePrefix + "_" + _namespaceGeneration.ToString() + NamespaceSeparator + rc;
             return rc;
         }
-        private string sanitize(string dirtyString)
+        private static string Sanitize(string dirtyString)
         {
-            if (dirtyString == null)
-                return null;
-            return dirtyString.Replace(separatorInner, sanitizer);
-
+            return dirtyString == null ? null : dirtyString.Replace(SeparatorInner, Sanitizer);
         }
-        private string sanitize(object dirtyString)
+
+        private static string Sanitize(object dirtyString)
         {
-            return sanitize(dirtyString.ToString());
+            return Sanitize(dirtyString.ToString());
         }
     }
 }

@@ -13,75 +13,66 @@ namespace NHibernate.Caches.Redis
     /// </summary>
     public class RedisGarbageCollector
     {
-        private int gcRefCount = 0;
-        private bool shouldStop = true;
-        private Thread garbageThread;
-        private RedisClient client;
-        private string host;
-        private int port;
+        private int _gcRefCount = 0;
+        private bool _shouldStop = true;
+        private Thread _garbageThread;
+        private RedisClient _client;
+        private readonly string _host;
+        private readonly int _port;
 
         public RedisGarbageCollector(string host, int port)
         {
-            this.host = host;
-            this.port = port;
+            this._host = host;
+            this._port = port;
         }
 
-        public void collectGarbage()
+        public void CollectGarbage()
         {
-            while (!shouldStop)
+            while (!_shouldStop)
             {
                 //BLPOP from garbage list
                 //run through keys, expiring all keys in set
-                string garbageKeys = client.BlockingPopItemFromList(RedisNamespace.namespacesGarbageKey, TimeSpan.FromSeconds(1));
-                if (garbageKeys != null)
+                var garbageKeys = _client.BlockingPopItemFromList(RedisNamespace.NamespacesGarbageKey, TimeSpan.FromSeconds(1));
+                if (garbageKeys == null) continue;
+                var key = _client.PopItemFromSet(garbageKeys);
+                while ( key != null && !_shouldStop)
                 {
-                    string key = client.PopItemFromSet(garbageKeys);
-                    while ( key != null && !shouldStop)
-                    {
-                        client.Expire(key, 0);
-                        key = client.PopItemFromSet(garbageKeys);
-                    }
-                    client.Expire(garbageKeys,0);
-               }
+                    _client.Expire(key, 0);
+                    key = _client.PopItemFromSet(garbageKeys);
+                }
+                _client.Expire(garbageKeys,0);
             }
         }
 
-        // start ye olde garbage collection thread
-        public void start()
+        // Start ye olde garbage collection thread
+        public void Start()
         {
             lock (this)
             {
-                gcRefCount++;
-                if (gcRefCount == 1)
-                {
-                    shouldStop = false;
-                    client = new RedisClient(host, port);
-                    garbageThread = new Thread(collectGarbage);
-                    garbageThread.Start();
-                    
-                }
- 
+                _gcRefCount++;
+                if (_gcRefCount != 1) return;
+                _shouldStop = false;
+                _client = new RedisClient(_host, _port);
+                _garbageThread = new Thread(CollectGarbage);
+                _garbageThread.Start();
             }
 
         }
-        //stop ye olde thread
-        public void stop()
+        //Stop ye olde thread
+        public void Stop()
         {
             lock (this)
             {
-                gcRefCount--;
-                if (gcRefCount == 0)
-                {
-                    //kill thread
-                    shouldStop = true;
-                    // Use the Join method to block the current thread 
-                    // until the object's thread terminates.
-                    garbageThread.Join();
-                    garbageThread = null;
-                    client.Dispose();
-                    client = null;
-
-                }
+                _gcRefCount--;
+                if (_gcRefCount != 0) return;
+                //kill thread
+                _shouldStop = true;
+                // Use the Join method to block the current thread 
+                // until the object's thread terminates.
+                _garbageThread.Join();
+                _garbageThread = null;
+                _client.Dispose();
+                _client = null;
             }
         }
     }

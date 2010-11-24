@@ -41,82 +41,82 @@ namespace NHibernate.Caches.Redis
     /// <summary>
     /// Redis cache client for Redis.
     /// </summary>
-	public class NHRedisClient : ICache
+	public class NhRedisClient : ICache
 	{
-		private static readonly IInternalLogger log;
-        private readonly PooledRedisClientManager clientManager;
-		private readonly int expiry;
+		private static readonly IInternalLogger Log;
+        private readonly PooledRedisClientManager _clientManager;
+		private readonly int _expiry;
 
-        // NHibernate settings for cache region and prefix
-		private readonly string region;
-		private readonly string regionPrefix;
+        // NHibernate settings for cache _region and prefix
+		private readonly string _region;
+		private readonly string _regionPrefix;
 
-        // manage cache region        
-        private RedisNamespace cacheNamespace;
+        // manage cache _region        
+        private readonly RedisNamespace cacheNamespace;
  
 
-   		static NHRedisClient()
+   		static NhRedisClient()
 		{
-			log = LoggerProvider.LoggerFor(typeof (RedisClient));
+			Log = LoggerProvider.LoggerFor(typeof (RedisClient));
  		}
 
-		public NHRedisClient()
+		public NhRedisClient()
 			: this("nhibernate", null)
 		{
 		}
 
-		public NHRedisClient(string regionName)
+		public NhRedisClient(string regionName)
 			: this(regionName, null)
 		{
 		}
 
-		public NHRedisClient(string regionName, IDictionary<string, string> properties)
+		public NhRedisClient(string regionName, IDictionary<string, string> properties)
 			: this(regionName, properties, null)
 		{
 		}
 
-        public NHRedisClient(string regionName, IDictionary<string, string> properties, PooledRedisClientManager manager)
+        public NhRedisClient(string regionName, IDictionary<string, string> properties, PooledRedisClientManager manager)
 		{
-			region = regionName;
-            string namespacePrefix = region;
+			_region = regionName;
+            var namespacePrefix = _region;
 
-            clientManager = manager;
-			expiry = 300;
+            _clientManager = manager;
+			_expiry = 300;
 
 			if (properties != null)
 			{
 				string expirationString = GetExpirationString(properties);
 				if (expirationString != null)
 				{
-					expiry = Convert.ToInt32(expirationString);
-					if (log.IsDebugEnabled)
+					_expiry = Convert.ToInt32(expirationString);
+					if (Log.IsDebugEnabled)
 					{
-						log.DebugFormat("using expiration of {0} seconds", expiry);
+						Log.DebugFormat("using expiration of {0} seconds", _expiry);
 					}
 				}
 
-				if (properties.ContainsKey("regionPrefix"))
+				if (properties.ContainsKey("_regionPrefix"))
 				{
-					regionPrefix = properties["regionPrefix"];
-                    if (regionPrefix != null && !regionPrefix.Equals(""))
-                        namespacePrefix = regionPrefix + "_" + region;
-					if (log.IsDebugEnabled)
+					_regionPrefix = properties["_regionPrefix"];
+                    if (_regionPrefix != null && !_regionPrefix.Equals(""))
+                        namespacePrefix = _regionPrefix + "_" + _region;
+					if (Log.IsDebugEnabled)
 					{
-						log.DebugFormat("new regionPrefix :{0}", regionPrefix);
+						Log.DebugFormat("new _regionPrefix :{0}", _regionPrefix);
 					}
         		}
 				else
 				{
-                   	if (log.IsDebugEnabled)
+                   	if (Log.IsDebugEnabled)
 					{
-						log.Debug("no regionPrefix value given, using defaults");
+						Log.Debug("no _regionPrefix value given, using defaults");
 					}
 				}
 			}
             cacheNamespace = new RedisNamespace(namespacePrefix);
 
             //make sure generation is synched with server
-            synchGeneration();
+            SynchGeneration();
 		}
 
 		#region ICache Members
@@ -127,32 +127,32 @@ namespace NHibernate.Caches.Redis
 			{
 				return null;
 			}
-			if (log.IsDebugEnabled)
+			if (Log.IsDebugEnabled)
 			{
-				log.DebugFormat("fetching object {0} from the cache", key);
+				Log.DebugFormat("fetching object {0} from the cache", key);
 			}
             byte[] maybeObj = null;
             IRedisNativeClient client = null;
             try
             {
-                client = acquireClient();
+                client = AcquireClient();
                 //do transactioned get of generation and value
                 //if it succeeds, and null is returned, then either the key doesn't exist or
                 // our generation is out of date. In the latter case , update generation and try
                 // again.
-                int generationFromServer = getGeneration();
+                int generationFromServer = GetGeneration();
                 while (true)
                 {
                     using (var trans = ((RedisClient)client).CreateTransaction())
                     {
-                        trans.QueueCommand(r => r.GetValue(cacheNamespace.getGenerationKey()), x => generationFromServer = Convert.ToInt32(x));
-                        trans.QueueCommand(r => ((RedisNativeClient)r).Get(cacheNamespace.globalKey(key)), x => maybeObj = x);
+                        trans.QueueCommand(r => r.GetValue(cacheNamespace.GetGenerationKey()), x => generationFromServer = Convert.ToInt32(x));
+                        trans.QueueCommand(r => ((RedisNativeClient)r).Get(cacheNamespace.GlobalKey(key)), x => maybeObj = x);
                         trans.Commit();
                     }
-                    if (generationFromServer != getGeneration())
+                    if (generationFromServer != GetGeneration())
                     {
                         //update cached generation value, and try again
-                        cacheNamespace.setGeneration(generationFromServer);
+                        cacheNamespace.SetGeneration(generationFromServer);
                     }
                     else
                         break;
@@ -161,19 +161,19 @@ namespace NHibernate.Caches.Redis
             }
             catch (Exception)
             {
-                log.WarnFormat("could not get: {0}", key);
+                Log.WarnFormat("could not get: {0}", key);
                 throw;
             }
             finally
             {
-                releaseClient(client);
+                ReleaseClient(client);
             }
            
 			if (maybeObj == null)
 			{
 				return null;
 			}
-            return deSerialize(maybeObj);
+            return DeSerialize(maybeObj);
 		}
 
 		public void Put(object key, object value)
@@ -187,31 +187,31 @@ namespace NHibernate.Caches.Redis
 				throw new ArgumentNullException("value", "null value not allowed");
 			}
 
-			if (log.IsDebugEnabled)
+			if (Log.IsDebugEnabled)
 			{
-				log.DebugFormat("setting value for item {0}", key);
+				Log.DebugFormat("setting value for item {0}", key);
 			}
-            byte[] bytes = serialize(value);
+            byte[] bytes = Serialize(value);
             IRedisNativeClient client = null;
             try
             {
                 // should this be in a transaction??
-                client = acquireClient();
-                string globalKey = cacheNamespace.globalKey(key);
+                client = AcquireClient();
+                string globalKey = cacheNamespace.GlobalKey(key);
                 //add global (key,value)
-                client.SetEx(globalKey, expiry, bytes);
+                client.SetEx(globalKey, _expiry, bytes);
                 //add key to globalKeys set for this namespace
-                ((IRedisClient)client).AddItemToSet(cacheNamespace.getGlobalKeysKey(), globalKey); 
+                ((IRedisClient)client).AddItemToSet(cacheNamespace.GetGlobalKeysKey(), globalKey); 
             }
             catch (Exception)
             {
-                log.WarnFormat("could not save: {0} => {1}", key, value);
+                Log.WarnFormat("could not save: {0} => {1}", key, value);
                 throw;
 
             }
             finally
             {
-                releaseClient(client);
+                ReleaseClient(client);
             }
 
        	}
@@ -222,49 +222,49 @@ namespace NHibernate.Caches.Redis
 			{
 				throw new ArgumentNullException("key");
 			}
-			if (log.IsDebugEnabled)
+			if (Log.IsDebugEnabled)
 			{
-				log.DebugFormat("removing item {0}", key);
+				Log.DebugFormat("removing item {0}", key);
 			}
             IRedisNativeClient client = null;
             try
             {
-                client = acquireClient();
-                client.Del(cacheNamespace.globalKey(key));
+                client = AcquireClient();
+                client.Del(cacheNamespace.GlobalKey(key));
             }
             catch (Exception)
             {
-                log.WarnFormat("could not delete key: {0}", key);
+                Log.WarnFormat("could not delete key: {0}", key);
                 throw;
 
             }
             finally
             {
-                releaseClient(client);
+                ReleaseClient(client);
             }
            
 		}
-        // clear cache region: 
+        // clear cache _region: 
         // 
 		public void Clear()
 		{
-            //rename set of keys, and start expiring the keys
+            //rename set of keys, and Start expiring the keys
             IRedisNativeClient client = null;
             try
             {
-                client = acquireClient();
+                client = AcquireClient();
                 using (var trans = ((RedisClient)client).CreateTransaction())
                 {               
-                     trans.QueueCommand(r => cacheNamespace.setGeneration( r.IncrementValue(cacheNamespace.getGenerationKey()))  );
-                     string temp = "temp_" + cacheNamespace.getGlobalKeysKey() + "_" + getGeneration().ToString();
-                     trans.QueueCommand(r => ((RedisNativeClient)r).Rename(cacheNamespace.getGlobalKeysKey(), temp));
-                    trans.QueueCommand(r => r.AddItemToList(RedisNamespace.namespacesGarbageKey, temp));
+                     trans.QueueCommand(r => cacheNamespace.SetGeneration( r.IncrementValue(cacheNamespace.GetGenerationKey()))  );
+                     string temp = "temp_" + cacheNamespace.GetGlobalKeysKey() + "_" + GetGeneration().ToString();
+                     trans.QueueCommand(r => ((RedisNativeClient)r).Rename(cacheNamespace.GetGlobalKeysKey(), temp));
+                    trans.QueueCommand(r => r.AddItemToList(RedisNamespace.NamespacesGarbageKey, temp));
                     trans.Commit();
                 }
             }
             finally
             {
-                releaseClient(client);
+                ReleaseClient(client);
             }
 		}
 
@@ -295,32 +295,32 @@ namespace NHibernate.Caches.Redis
 
 		public string RegionName
 		{
-			get { return region; }
+			get { return _region; }
 		}
 
 		#endregion
 
-        // serialize object to buffer
-        private byte[] serialize(object value)
+        // Serialize object to buffer
+        private static byte[] Serialize(object value)
         {
             var dictEntry = new DictionaryEntry(null, value);
-            System.IO.MemoryStream memoryStream = new System.IO.MemoryStream(1024);
-            BinaryFormatter bf = new BinaryFormatter();
+            var memoryStream = new System.IO.MemoryStream(1024);
+            var bf = new BinaryFormatter();
             bf.Serialize(memoryStream, dictEntry);
             return memoryStream.GetBuffer();
         }
-        // deSerialize buffer to object
-        private object deSerialize(byte[] someBytes)
+        // DeSerialize buffer to object
+        private static object DeSerialize(byte[] someBytes)
         {
-            System.IO.MemoryStream _memoryStream = new System.IO.MemoryStream(1024);
-            BinaryFormatter bf = new BinaryFormatter();
-            _memoryStream.Write(someBytes, 0, someBytes.Length);
-            _memoryStream.Seek(0, 0);
-            DictionaryEntry de = (DictionaryEntry)bf.Deserialize(_memoryStream);
+            var memoryStream = new System.IO.MemoryStream(1024);
+            var bf = new BinaryFormatter();
+            memoryStream.Write(someBytes, 0, someBytes.Length);
+            memoryStream.Seek(0, 0);
+            var de = (DictionaryEntry)bf.Deserialize(memoryStream);
             return de.Value;
         }
 
-        // get value for cache region expiry
+        // get value for cache _region _expiry
 		private static string GetExpirationString(IDictionary<string, string> props)
 		{
 			string result;
@@ -332,35 +332,35 @@ namespace NHibernate.Caches.Redis
 		}
 
         // acquire redis client from pool
-        private IRedisNativeClient acquireClient()
+        private IRedisNativeClient AcquireClient()
         {
-            if (clientManager == null)
-                throw new Exception("acquireClient: clientManager is null");
-            return (IRedisNativeClient)clientManager.GetClient();
+            if (_clientManager == null)
+                throw new Exception("AcquireClient: _clientManager is null");
+            return (IRedisNativeClient)_clientManager.GetClient();
         }
         // release redis client back to pool
-        private void releaseClient(IRedisNativeClient activeClient)
+        private void ReleaseClient(IRedisNativeClient activeClient)
         {
-            clientManager.DisposeClient((RedisNativeClient)activeClient);
+            _clientManager.DisposeClient((RedisNativeClient)activeClient);
         }
-        // return cache region generation
-        private int getGeneration()
+        // return cache _region generation
+        private int GetGeneration()
         {
-            synchGeneration();
-            return cacheNamespace.getGeneration();
+            SynchGeneration();
+            return cacheNamespace.GetGeneration();
         }
-        // hit server for cache region generation
-        private int fetchGeneration()
+        // hit server for cache _region generation
+        private int FetchGeneration()
         {
             int rc = 0;
             IRedisClient client = null;
             try
             {
-                client = (IRedisClient)acquireClient();
-                string val = client.GetValue(cacheNamespace.getGenerationKey());
+                client = (IRedisClient)AcquireClient();
+                string val = client.GetValue(cacheNamespace.GetGenerationKey());
                 if (val == null)
                 {
-                    client.Set<int>(cacheNamespace.getGenerationKey(),0);
+                    client.Set<int>(cacheNamespace.GetGenerationKey(),0);
                 }
                 else
                 {
@@ -369,16 +369,16 @@ namespace NHibernate.Caches.Redis
             }
             finally
             {
-                releaseClient((IRedisNativeClient)client);
+                ReleaseClient((IRedisNativeClient)client);
             }
             return rc;
         }
         // fetch generation value from redis server, if generation is uninitialized
-        private void synchGeneration()
+        private void SynchGeneration()
         {
-            if (cacheNamespace.getGeneration() == -1 && clientManager != null)
+            if (cacheNamespace.GetGeneration() == -1 && _clientManager != null)
             {
-                cacheNamespace.setGeneration(fetchGeneration());
+                cacheNamespace.SetGeneration(FetchGeneration());
             }
         }
 	}

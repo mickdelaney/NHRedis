@@ -87,7 +87,7 @@ namespace NHibernate.Caches.Redis
 			}
 
 
-            return new NHRedisClient(regionName, properties, clientManager);
+            return new NhRedisClient(regionName, properties, clientManager);
 		}
 
 		public long NextTimestamp()
@@ -119,7 +119,7 @@ namespace NHibernate.Caches.Redis
                                                     new List<string>(), poolConfig);
 
                 }
-                garbageCollector.start();
+                garbageCollector.Start();
 			}
 		}
 
@@ -130,7 +130,7 @@ namespace NHibernate.Caches.Redis
                 clientManager.Dispose();
                 clientManager = null;
 
-                garbageCollector.stop();
+                garbageCollector.Stop();
 			}
 		}
 
