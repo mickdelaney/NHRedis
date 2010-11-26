@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using ServiceStack.Redis;
 
@@ -64,7 +61,7 @@ namespace NHibernate.Caches.Redis
             lock (this)
             {
                 _gcRefCount--;
-                if (_gcRefCount != 0) return;
+                if (_gcRefCount != 0 || _garbageThread == null) return;
                 //kill thread
                 _shouldStop = true;
                 // Use the Join method to block the current thread 

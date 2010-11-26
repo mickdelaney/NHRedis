@@ -26,11 +26,9 @@
 
 using System.Collections.Generic;
 using System.Configuration;
-using System.Net;
 using System.Text;
 using ServiceStack.Redis;
 using NHibernate.Cache;
-using NHibernate.Caches.Redis;
 
 namespace NHibernate.Caches.Redis
 {
@@ -39,24 +37,24 @@ namespace NHibernate.Caches.Redis
 	/// </summary>
 	public class RedisProvider : ICacheProvider
 	{
-		private static readonly IInternalLogger log;
-		private static readonly RedisConfig config;
-        private PooledRedisClientManager clientManager;
-		private static readonly object syncObject = new object();
+		private static readonly IInternalLogger Log;
+		private static readonly RedisConfig Config;
+        private PooledRedisClientManager _clientManager;
+		private static readonly object SyncObject = new object();
 
-        private static RedisGarbageCollector garbageCollector;
+        private static readonly RedisGarbageCollector GarbageCollector;
 
 
 		static RedisProvider()
 		{
-			log = LoggerProvider.LoggerFor(typeof (RedisProvider));
-            config = ConfigurationManager.GetSection("redis") as RedisConfig;
-			if (config == null)
+			Log = LoggerProvider.LoggerFor(typeof (RedisProvider));
+            Config = ConfigurationManager.GetSection("redis") as RedisConfig;
+			if (Config == null)
 			{
-				log.Info("redis configuration section not found, using default configuration (127.0.0.1:6379).");
-				config = new RedisConfig("localhost",6379);
+				Log.Info("redis configuration section not found, using default configuration (127.0.0.1:6379).");
+				Config = new RedisConfig("localhost",6379);
     		}
-            garbageCollector = new RedisGarbageCollector(config.Host, config.Port);
+            GarbageCollector = new RedisGarbageCollector(Config.Host, Config.Port);
 
 		}
 
@@ -72,7 +70,7 @@ namespace NHibernate.Caches.Redis
 			{
 				properties = new Dictionary<string, string>();
 			}
-			if (log.IsDebugEnabled)
+			if (Log.IsDebugEnabled)
 			{
 				var sb = new StringBuilder();
 				foreach (var pair in properties)
@@ -83,11 +81,11 @@ namespace NHibernate.Caches.Redis
 					sb.Append(pair.Value);
 					sb.Append(";");
 				}
-				log.Debug("building cache with region: " + regionName + ", properties: " + sb);
+				Log.Debug("building cache with region: " + regionName + ", properties: " + sb);
 			}
 
 
-            return new NhRedisClient(regionName, properties, clientManager);
+            return new NhRedisClient(regionName, properties, _clientManager);
 		}
 
 		public long NextTimestamp()
@@ -99,38 +97,40 @@ namespace NHibernate.Caches.Redis
 		{
 			// Needs to lock staticly because the pool and the internal maintenance thread
 			// are both static, and I want them syncs between starts and stops.
-			lock (syncObject)
+			lock (SyncObject)
 			{
-				if (config == null)
+				if (Config == null)
 				{
 					throw new ConfigurationErrorsException("Configuration for enyim.com/memcached not found");
 				}
 
 
-                if (clientManager == null)
+                if (_clientManager == null)
                 {
 
                     RedisClientManagerConfig poolConfig = new RedisClientManagerConfig();
-                    poolConfig.MaxReadPoolSize = config.MaxReadPoolSize;
-                    poolConfig.MaxWritePoolSize = config.MaxWritePoolSize;
+                    poolConfig.MaxReadPoolSize = Config.MaxReadPoolSize;
+                    poolConfig.MaxWritePoolSize = Config.MaxWritePoolSize;
 
-                    List<string> readWrite = new List<string>() { config.Host };
-                    clientManager = new PooledRedisClientManager(new List<string>() { config.Host },
+                    List<string> readWrite = new List<string>() { Config.Host };
+                    _clientManager = new PooledRedisClientManager(new List<string>() { Config.Host },
                                                     new List<string>(), poolConfig);
+                    _clientManager.RedisClientFactory = new CustomRedisClientFactory();
+                                                 
 
                 }
-                garbageCollector.Start();
+                GarbageCollector.Start();
 			}
 		}
 
 		public void Stop()
 		{
-			lock (syncObject)
+			lock (SyncObject)
 			{
-                clientManager.Dispose();
-                clientManager = null;
+                _clientManager.Dispose();
+                _clientManager = null;
 
-                garbageCollector.Stop();
+                GarbageCollector.Stop();
 			}
 		}
 
