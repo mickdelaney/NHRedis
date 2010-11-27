@@ -288,18 +288,10 @@ namespace NHibernate.Caches.Redis
 		public void Lock(object key)
 		{
             CustomRedisClient client = null;
-            var temp = new byte[1];
-		    temp[0] = 1;
             try
             {
                 client = AcquireClient();
-                int wasSet = client.SetNX(_cacheNamespace.GlobalLockKey(key), temp);
-                while (wasSet == 0)
-                {
-                    Thread.Sleep(100);
-                    wasSet = client.SetNX(_cacheNamespace.GlobalLockKey(key), temp);
-
-                }
+                client.Lock(_cacheNamespace.GlobalLockKey(key));              
             }
             catch (Exception)
             {
@@ -321,7 +313,7 @@ namespace NHibernate.Caches.Redis
             try
             {
                 client = AcquireClient();
-                client.Del(_cacheNamespace.GlobalLockKey(key));
+                client.Unlock(_cacheNamespace.GlobalLockKey(key));
               
             }
             catch (Exception)
@@ -391,15 +383,7 @@ namespace NHibernate.Caches.Redis
             try
             {
                 client = AcquireClient();
-                string val = client.GetValue(_cacheNamespace.GetGenerationKey());
-                if (val == null)
-                {
-                    client.Set<int>(_cacheNamespace.GetGenerationKey(),0);
-                }
-                else
-                {
-                    rc = Convert.ToInt32(val);
-                }
+                rc = client.FetchGeneration(_cacheNamespace.GetGenerationKey());
             }
             finally
             {
