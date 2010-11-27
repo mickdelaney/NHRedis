@@ -25,11 +25,10 @@
 #endregion
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using ServiceStack.Redis;
 using NHibernate.Cache;
-using System.Runtime.Serialization.Formatters.Binary;
+using System.Threading;
 using Environment = NHibernate.Cfg.Environment;
 
 namespace NHibernate.Caches.Redis
@@ -198,11 +197,11 @@ namespace NHibernate.Caches.Redis
                 var generationFromServer = GetGeneration();
                 while (true)
                 {
-                    using (var trans = ((RedisClient)client).CreateTransaction())
+                    using (var trans = client.CreateTransaction())
                     {
                         var globalKey = _cacheNamespace.GlobalKey(key);
                         trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()), x => generationFromServer = Convert.ToInt32(x));
-                        trans.QueueCommand(r => ((RedisNativeClient)r).SetEx(globalKey,_expiry, bytes));
+                        trans.QueueCommand(r => ((IRedisNativeClient)r).SetEx(globalKey,_expiry, bytes));
 
                         //add key to globalKeys set for this namespace
                         trans.QueueCommand(r => r.AddItemToSet(_cacheNamespace.GetGlobalKeysKey(), globalKey));
@@ -266,7 +265,7 @@ namespace NHibernate.Caches.Redis
             try
             {
                 client = AcquireClient();
-                using (var trans = ((RedisClient)client).CreateTransaction())
+                using (var trans = client.CreateTransaction())
                 {               
                      trans.QueueCommand(r => _cacheNamespace.SetGeneration( r.IncrementValue(_cacheNamespace.GetGenerationKey()))  );
                      var temp = "temp_" + _cacheNamespace.GetGlobalKeysKey() + "_" + GetGeneration().ToString();
@@ -288,12 +287,53 @@ namespace NHibernate.Caches.Redis
 
 		public void Lock(object key)
 		{
-			// do nothing
+            CustomRedisClient client = null;
+            var temp = new byte[1];
+		    temp[0] = 1;
+            try
+            {
+                client = AcquireClient();
+                int wasSet = client.SetNX(_cacheNamespace.GlobalLockKey(key), temp);
+                while (wasSet == 0)
+                {
+                    Thread.Sleep(100);
+                    wasSet = client.SetNX(_cacheNamespace.GlobalLockKey(key), temp);
+
+                }
+            }
+            catch (Exception)
+            {
+                Log.WarnFormat("could not acquire lock for key: {0}", key);
+                throw;
+
+            }
+            finally
+            {
+                ReleaseClient(client);
+            }
 		}
 
 		public void Unlock(object key)
 		{
-			// do nothing
+            CustomRedisClient client = null;
+            var temp = new byte[1];
+            temp[0] = 1;
+            try
+            {
+                client = AcquireClient();
+                client.Del(_cacheNamespace.GlobalLockKey(key));
+              
+            }
+            catch (Exception)
+            {
+                Log.WarnFormat("could not release lock for key: {0}", key);
+                throw;
+
+            }
+            finally
+            {
+                ReleaseClient(client);
+            }
 		}
 
 		public long NextTimestamp()
@@ -333,7 +373,7 @@ namespace NHibernate.Caches.Redis
             return (CustomRedisClient)_clientManager.GetClient();
         }
         // release redis client back to pool
-        private void ReleaseClient(CustomRedisClient activeClient)
+        private void ReleaseClient(RedisNativeClient activeClient)
         {
             _clientManager.DisposeClient(activeClient);
         }

@@ -15,10 +15,14 @@ namespace NHibernate.Caches.Redis
         //#?#
         private const string NamespaceSeparator = SeparatorOuter + SeparatorInner + SeparatorOuter;
 
+        //?#
+        private const string Uniqueifier = SeparatorInner + SeparatorOuter;
+
+
         //??
         private const string Sanitizer = SeparatorInner + SeparatorInner;
 
-        // strings that have only single SeparatorInner characters in them,
+        // strings that only have odd-numbered runs SeparatorInner characters in them,
         // and do not end with SeparatorOuter SeparatorInner,
         // are valid, reserved names
 
@@ -38,16 +42,17 @@ namespace NHibernate.Caches.Redis
         private readonly string _globalKeysKey;
 
         // key for list keys slated for garbage collection
-        // (having two single SeparatorInner characters guarantees uniqueness for this key)
-        public static readonly string NamespacesGarbageKey = SeparatorInner + "REDIS_NAMESPACES_GARBAGE" + SeparatorInner;
+        // (having a single uniqueifier guarantees uniqueness for this key)
+        public static string NamespacesGarbageKey = Uniqueifier + "REDIS_NAMESPACES_GARBAGE";
+
+        private int uniqueCount = 1;
 
 
         public RedisNamespace(string name)
         {
             _namespacePrefix = Sanitize(name);
 
-            //no sanitized string can have an odd-length substring of SeparatorInner characters
-            _namespaceReservedName = SeparatorInner + _namespacePrefix;
+            _namespaceReservedName = MakeUnique(_namespacePrefix);
 
             _globalKeysKey = _namespaceReservedName;
 
@@ -88,6 +93,10 @@ namespace NHibernate.Caches.Redis
                 rc = _namespacePrefix + "_" + _namespaceGeneration.ToString() + NamespaceSeparator + rc;
             return rc;
         }
+        public string GlobalLockKey(object key)
+        {
+            return Uniqueifier + GlobalKey(key);
+        }
         private static string Sanitize(string dirtyString)
         {
             return dirtyString == null ? null : dirtyString.Replace(SeparatorInner, Sanitizer);
@@ -96,6 +105,14 @@ namespace NHibernate.Caches.Redis
         private static string Sanitize(object dirtyString)
         {
             return Sanitize(dirtyString.ToString());
+        }
+        private string MakeUnique(string myString)
+        {
+            for (int i = 0; i < uniqueCount; ++i)
+                myString = Uniqueifier + myString;
+            uniqueCount++;
+            return myString;
+
         }
     }
 }
