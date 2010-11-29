@@ -25,6 +25,7 @@
 #endregion
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using ServiceStack.Redis;
 using NHibernate.Cache;
@@ -169,7 +170,12 @@ namespace NHibernate.Caches.Redis
 		    return rc;
 		}
 
-		public void Put(object key, object value)
+        public object Get(long sessionId, object key)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void Put(object key, object value)
 		{
 			if (key == null)
 			{
@@ -228,7 +234,12 @@ namespace NHibernate.Caches.Redis
             }
        	}
 
-		public void Remove(object key)
+        public void Put(long sessionId, object key, object value, object version, IComparer versionComparator)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void Remove(object key)
 		{
 			if (key == null)
 			{
@@ -308,8 +319,6 @@ namespace NHibernate.Caches.Redis
 		public void Unlock(object key)
 		{
             CustomRedisClient client = null;
-            var temp = new byte[1];
-            temp[0] = 1;
             try
             {
                 client = AcquireClient();
@@ -328,7 +337,27 @@ namespace NHibernate.Caches.Redis
             }
 		}
 
-		public long NextTimestamp()
+        public long LockCopyOnWrite(long sessionId, object key, object version)
+        {
+            throw new NotImplementedException();
+        }
+
+        public long UnlockCopyOnWrite(long sessionId, object key)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IDisposable GetReadLock()
+        {
+            return new DummyCacheLock();
+        }
+
+        public IDisposable GetWriteLock()
+        {
+            return new DummyCacheLock();
+        }
+
+        public long NextTimestamp()
 		{
 			return Timestamper.Next();
 		}

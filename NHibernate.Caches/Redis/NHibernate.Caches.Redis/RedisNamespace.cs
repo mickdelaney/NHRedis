@@ -16,7 +16,7 @@ namespace NHibernate.Caches.Redis
         private const string NamespaceSeparator = SeparatorOuter + SeparatorInner + SeparatorOuter;
 
         //?#
-        private const string Uniqueifier = SeparatorInner + SeparatorOuter;
+        public const string Uniqueifier = SeparatorInner + SeparatorOuter;
 
 
         //??
@@ -43,7 +43,7 @@ namespace NHibernate.Caches.Redis
 
         // key for list keys slated for garbage collection
         // (having a single uniqueifier guarantees uniqueness for this key)
-        public static string NamespacesGarbageKey = Uniqueifier + "REDIS_NAMESPACES_GARBAGE";
+        public static string NamespacesGarbageKey = Uniqueifier + "NHREDIS_NAMESPACES_GARBAGE";
 
         private int uniqueCount = 1;
 

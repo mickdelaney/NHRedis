@@ -24,6 +24,7 @@
 
 #endregion
 
+using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Text;
@@ -44,6 +45,11 @@ namespace NHibernate.Caches.Redis
 
         private static readonly RedisGarbageCollector GarbageCollector;
 
+	    private static readonly int concurrencyIdBlockSize = 100000;
+	    private static int nextConcurrencyId=-1;
+	    private static int concurrencyIdUpperLimit=-1;
+
+	    private static readonly string concurrencyIdKey = RedisNamespace.Uniqueifier + "NHREDIS_CONCURRENCY_IDS";
 
 		static RedisProvider()
 		{
@@ -93,7 +99,15 @@ namespace NHibernate.Caches.Redis
 			return Timestamper.Next();
 		}
 
-		public void Start(IDictionary<string, string> properties)
+	    public long NextConcurrencyId()
+	    {
+	        synchConcurrencyIds();
+	        long id = nextConcurrencyId;
+	        nextConcurrencyId++;
+	        return id;
+	    }
+
+	    public void Start(IDictionary<string, string> properties)
 		{
 			// Needs to lock staticly because the pool and the internal maintenance thread
 			// are both static, and I want them syncs between starts and stops.
@@ -116,6 +130,8 @@ namespace NHibernate.Caches.Redis
                     _clientManager = new PooledRedisClientManager(new List<string>() { Config.Host },
                                                     new List<string>(), poolConfig);
                     _clientManager.RedisClientFactory = new CustomRedisClientFactory();
+
+                    synchConcurrencyIds();
                                                  
 
                 }
@@ -135,5 +151,25 @@ namespace NHibernate.Caches.Redis
 		}
 
 		#endregion
+
+        private void synchConcurrencyIds()
+        {
+            if (nextConcurrencyId == -1 || nextConcurrencyId == concurrencyIdUpperLimit)
+            {
+                IRedisClient client = null;
+                try
+                {
+                    client = _clientManager.GetClient();
+                    concurrencyIdUpperLimit = client.IncrementValueBy(concurrencyIdKey, concurrencyIdBlockSize);
+                    nextConcurrencyId = concurrencyIdUpperLimit - concurrencyIdBlockSize;
+                }
+                finally
+                {
+                    _clientManager.DisposeClient((RedisNativeClient)client);
+                   
+                }
+
+            }
+        }
 	}
 }

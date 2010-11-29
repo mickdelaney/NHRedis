@@ -5,8 +5,8 @@ using ServiceStack.Redis;
 namespace NHibernate.Caches.Redis
 {
     /// <summary>
-    /// Garbage collection class. Runs its own thread, doing BLPOP on garbage key list, then deleting all keys in list
-    /// and then deleting list.
+    /// Garbage collection class. Runs its own thread, doing BLPOP on garbage key list, 
+    /// then expiring all keys in list
     /// </summary>
     public class RedisGarbageCollector
     {
@@ -32,12 +32,12 @@ namespace NHibernate.Caches.Redis
                 var garbageKeys = _client.BlockingPopItemFromList(RedisNamespace.NamespacesGarbageKey, TimeSpan.FromSeconds(1));
                 if (garbageKeys == null) continue;
                 var key = _client.PopItemFromSet(garbageKeys);
+                //note: garbageKeys set will deleted by Redis when it has zero members
                 while ( key != null && !_shouldStop)
                 {
                     _client.Expire(key, 0);
                     key = _client.PopItemFromSet(garbageKeys);
                 }
-                _client.Expire(garbageKeys,0);
             }
         }
 
