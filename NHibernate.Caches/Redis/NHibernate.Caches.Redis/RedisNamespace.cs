@@ -86,16 +86,18 @@ namespace NHibernate.Caches.Redis
             return _globalKeysKey;
         }
 
-        public string GlobalKey(object key)
+        public string GlobalKey(object key, int numUniquePrefixes)
         {
             var rc = Sanitize(key);
             if (_namespacePrefix != null && !_namespacePrefix.Equals(""))
                 rc = _namespacePrefix + "_" + _namespaceGeneration.ToString() + NamespaceSeparator + rc;
+            for (int i = 0; i < numUniquePrefixes; ++i )
+                rc = Uniqueifier + rc;
             return rc;
         }
         public string GlobalLockKey(object key)
         {
-            return Uniqueifier + GlobalKey(key);
+            return Uniqueifier + GlobalKey(key, 0);
         }
         private static string Sanitize(string dirtyString)
         {

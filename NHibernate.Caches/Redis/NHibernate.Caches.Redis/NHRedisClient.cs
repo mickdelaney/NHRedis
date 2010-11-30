@@ -70,7 +70,12 @@ namespace NHibernate.Caches.Redis
 			: this(regionName, properties, null)
 		{
 		}
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="regionName"></param>
+        /// <param name="properties"></param>
+        /// <param name="manager"></param>
         public NhRedisClient(string regionName, IDictionary<string, string> properties, PooledRedisClientManager manager)
 		{
 			_region = regionName;
@@ -116,7 +121,11 @@ namespace NHibernate.Caches.Redis
 		}
 
 		#region ICache Members
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="key"></param>
+        /// <returns></returns>
 		public object Get(object key)
 		{
 			if (key == null)
@@ -143,7 +152,7 @@ namespace NHibernate.Caches.Redis
                     using (var trans = ((RedisClient)client).CreateTransaction())
                     {
                         trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()), x => generationFromServer = Convert.ToInt32(x));
-                        trans.QueueCommand(r => ((RedisNativeClient)r).Get(_cacheNamespace.GlobalKey(key)), x => maybeObj = x);
+                        trans.QueueCommand(r => ((RedisNativeClient)r).Get(_cacheNamespace.GlobalKey(key, 0)), x => maybeObj = x);
                         trans.Commit();
                     }
                     if (generationFromServer != GetGeneration())
@@ -169,12 +178,70 @@ namespace NHibernate.Caches.Redis
 
 		    return rc;
 		}
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="sessionId"></param>
+        /// <param name="key"></param>
+        /// <returns></returns>
         public object Get(long sessionId, object key)
         {
-            throw new NotImplementedException();
-        }
+            if (key == null)
+            {
+                return null;
+            }
+            if (Log.IsDebugEnabled)
+            {
+                Log.DebugFormat("fetching object {0} from the cache", key);
+            }
+            byte[] maybeObj = null;
+            object rc = null;
+            CustomRedisClient client = null;
+            try
+            {
+                client = AcquireClient();
+                //do transactioned get of generation and value
+                //if it succeeds, and null is returned, then either the key doesn't exist or
+                // our generation is out of date. In the latter case , update generation and try
+                // again.
+                var generationFromServer = GetGeneration();
+                while (true)
+                {
+                    using (var trans = ((RedisClient)client).CreateTransaction())
+                    {
+                        trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()), x => generationFromServer = Convert.ToInt32(x));
+                        trans.QueueCommand(r => ((RedisNativeClient)r).Get(_cacheNamespace.GlobalKey(key, 0)), x => maybeObj = x);
+                        trans.Commit();
+                    }
+                    if (generationFromServer != GetGeneration())
+                    {
+                        //update cached generation value, and try again
+                        _cacheNamespace.SetGeneration(generationFromServer);
+                    }
+                    else
+                        break;
+                }
+                rc = maybeObj == null ? null : client.Deserialize(maybeObj);
 
+            }
+            catch (Exception)
+            {
+                Log.WarnFormat("could not get: {0}", key);
+                throw;
+            }
+            finally
+            {
+                ReleaseClient(client);
+            }
+
+            return rc;
+        
+        }
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="key"></param>
+        /// <param name="value"></param>
         public void Put(object key, object value)
 		{
 			if (key == null)
@@ -205,7 +272,7 @@ namespace NHibernate.Caches.Redis
                 {
                     using (var trans = client.CreateTransaction())
                     {
-                        var globalKey = _cacheNamespace.GlobalKey(key);
+                        var globalKey = _cacheNamespace.GlobalKey(key, 0);
                         trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()), x => generationFromServer = Convert.ToInt32(x));
                         trans.QueueCommand(r => ((IRedisNativeClient)r).SetEx(globalKey,_expiry, bytes));
 
@@ -233,12 +300,76 @@ namespace NHibernate.Caches.Redis
                 ReleaseClient(client);
             }
        	}
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="sessionId"></param>
+        /// <param name="key"></param>
+        /// <param name="value"></param>
+        /// <param name="version"></param>
+        /// <param name="versionComparator"></param>
         public void Put(long sessionId, object key, object value, object version, IComparer versionComparator)
         {
-            throw new NotImplementedException();
-        }
+            if (key == null)
+            {
+                throw new ArgumentNullException("key", "null key not allowed");
+            }
+            if (value == null)
+            {
+                throw new ArgumentNullException("value", "null value not allowed");
+            }
 
+            if (Log.IsDebugEnabled)
+            {
+                Log.DebugFormat("setting value for item {0}", key);
+            }
+
+            CustomRedisClient client = null;
+            try
+            {
+                client = AcquireClient();
+                var bytes = client.Serialize(value);
+                //do transactioned get of generation and value
+                //if it succeeds, and null is returned, then either the key doesn't exist or
+                // our generation is out of date. In the latter case , update generation and try
+                // again.
+                var generationFromServer = GetGeneration();
+                while (true)
+                {
+                    using (var trans = client.CreateTransaction())
+                    {
+                        var globalKey = _cacheNamespace.GlobalKey(key, 0);
+                        trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()), x => generationFromServer = Convert.ToInt32(x));
+                        trans.QueueCommand(r => ((IRedisNativeClient)r).SetEx(globalKey, _expiry, bytes));
+
+                        //add key to globalKeys set for this namespace
+                        trans.QueueCommand(r => r.AddItemToSet(_cacheNamespace.GetGlobalKeysKey(), globalKey));
+                        trans.Commit();
+                    }
+                    if (generationFromServer != GetGeneration())
+                    {
+                        //update cached generation value, and try again
+                        _cacheNamespace.SetGeneration(generationFromServer);
+                    }
+                    else
+                        break;
+                }
+
+            }
+            catch (Exception)
+            {
+                Log.WarnFormat("could not get: {0}", key);
+                throw;
+            }
+            finally
+            {
+                ReleaseClient(client);
+            }
+        }
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="key"></param>
         public void Remove(object key)
 		{
 			if (key == null)
@@ -253,7 +384,7 @@ namespace NHibernate.Caches.Redis
             try
             {
                 client = AcquireClient();
-                client.Del(_cacheNamespace.GlobalKey(key));
+                client.Del(_cacheNamespace.GlobalKey(key, 0));
             }
             catch (Exception)
             {
@@ -267,8 +398,10 @@ namespace NHibernate.Caches.Redis
             }
            
 		}
-        // clear cache _region: 
-        // 
+ 
+        /// <summary>
+        /// clear cache region
+        /// </summary>
 		public void Clear()
 		{
             //rename set of keys, and Start expiring the keys
@@ -290,12 +423,17 @@ namespace NHibernate.Caches.Redis
                 ReleaseClient(client);
             }
 		}
-
+        /// <summary>
+        /// 
+        /// </summary>
 		public void Destroy()
 		{
 			Clear();
 		}
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="key"></param>
 		public void Lock(object key)
 		{
             CustomRedisClient client = null;
@@ -315,7 +453,10 @@ namespace NHibernate.Caches.Redis
                 ReleaseClient(client);
             }
 		}
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="key"></param>
 		public void Unlock(object key)
 		{
             CustomRedisClient client = null;
@@ -336,37 +477,72 @@ namespace NHibernate.Caches.Redis
                 ReleaseClient(client);
             }
 		}
-
-        public long LockCopyOnWrite(long sessionId, object key, object version)
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="sessionId"></param>
+        /// <param name="key"></param>
+        /// <param name="version"></param>
+        /// <returns></returns>
+        public long LockCow(long sessionId, object key, object version)
         {
-            throw new NotImplementedException();
-        }
+            //1. if key is not in backing store, then throw exception (or perhaps handle cache expiry)
 
-        public long UnlockCopyOnWrite(long sessionId, object key)
+            //2. if key is not in cow store, then create it (lock count set to one)
+
+            //3. else increment lock on existing item
+            return 0;
+        }
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="sessionId"></param>
+        /// <param name="key"></param>
+        /// <returns></returns>
+        public long UnlockCow(long sessionId, object key)
         {
-            throw new NotImplementedException();
-        }
+            //1. if item not in cow store, then throw execption (or perhaps handle cache expiry)
 
+            //2. unlock item
+
+            //3. if lock count is at zero, then update backing store, and delete item from cow store
+
+            return 0;
+        }
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <returns></returns>
         public IDisposable GetReadLock()
         {
             return new DummyCacheLock();
         }
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <returns></returns>
         public IDisposable GetWriteLock()
         {
             return new DummyCacheLock();
         }
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <returns></returns>
         public long NextTimestamp()
 		{
 			return Timestamper.Next();
 		}
-
+        /// <summary>
+        /// 
+        /// </summary>
 		public int Timeout
 		{
 			get { return Timestamper.OneMs*60000; }
 		}
-
+        /// <summary>
+        /// 
+        /// </summary>
 		public string RegionName
 		{
 			get { return _region; }
@@ -375,7 +551,11 @@ namespace NHibernate.Caches.Redis
 		#endregion
 
 
-        // get value for cache _region _expiry
+        /// <summary>
+        /// get value for cache _region _expiry
+        /// </summary>
+        /// <param name="props"></param>
+        /// <returns></returns>
 		private static string GetExpirationString(IDictionary<string, string> props)
 		{
 			string result;
@@ -386,25 +566,40 @@ namespace NHibernate.Caches.Redis
 			return result;
 		}
 
-        // acquire redis client from pool
+        /// <summary>
+        /// acquire redis client from pool 
+        /// </summary>
+        /// <returns></returns>
         private CustomRedisClient AcquireClient()
         {
             if (_clientManager == null)
                 throw new Exception("AcquireClient: _clientManager is null");
             return (CustomRedisClient)_clientManager.GetClient();
         }
-        // release redis client back to pool
+
+        /// <summary>
+        /// release redis client back to pool
+        /// </summary>
+        /// <param name="activeClient"></param>
         private void ReleaseClient(RedisNativeClient activeClient)
         {
             _clientManager.DisposeClient(activeClient);
         }
-        // return cache _region generation
+
+        /// <summary>
+        /// return cache _region generation
+        /// </summary>
+        /// <returns></returns>
         private int GetGeneration()
         {
             SynchGeneration();
             return _cacheNamespace.GetGeneration();
         }
-        // hit server for cache _region generation
+ 
+        /// <summary>
+        /// hit server for cache _region generation
+        /// </summary>
+        /// <returns></returns>
         private int FetchGeneration()
         {
             int rc = 0;
@@ -420,7 +615,10 @@ namespace NHibernate.Caches.Redis
             }
             return rc;
         }
-        // fetch generation value from redis server, if generation is uninitialized
+
+        /// <summary>
+        /// fetch generation value from redis server, if generation is uninitialized 
+        /// </summary>
         private void SynchGeneration()
         {
             if (_cacheNamespace.GetGeneration() == -1 && _clientManager != null)
