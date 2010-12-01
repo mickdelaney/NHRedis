@@ -6,9 +6,6 @@ This provider makes use of the excellent ServiceStackRedis
 
 http://code.google.com/p/servicestack/wiki/ServiceStackRedis
 
-Please note: this has NOT been tested in production. 
-You have been warned.
-
 
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
