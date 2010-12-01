@@ -382,8 +382,7 @@ namespace NHibernate.Caches.Redis
             {
                 using (var disposable = new DisposableClient(_clientManager))
                 {
-                    CustomRedisClient client = disposable.Client;
-                    client.Del(_cacheNamespace.GlobalKey(key, 0));
+                    disposable.Client.Del(_cacheNamespace.GlobalKey(key, 0));
                 }
             }
             catch (Exception)
@@ -433,8 +432,7 @@ namespace NHibernate.Caches.Redis
             {
                 using (var disposable = new DisposableClient(_clientManager))
                 {
-                    CustomRedisClient client = disposable.Client;
-                    client.Lock(_cacheNamespace.GlobalLockKey(key));
+                    disposable.Client.Lock(_cacheNamespace.GlobalKey(key,RedisNamespace.NumTagsForGlobalLockKey));
                 }
             }
             catch (Exception)
@@ -454,8 +452,7 @@ namespace NHibernate.Caches.Redis
             {
                 using (var disposable = new DisposableClient(_clientManager))
                 {
-                    CustomRedisClient client = disposable.Client;
-                    client.Unlock(_cacheNamespace.GlobalLockKey(key));
+                    disposable.Client.Unlock(_cacheNamespace.GlobalKey(key,RedisNamespace.NumTagsForGlobalLockKey));
                 }
 
             }
@@ -475,11 +472,10 @@ namespace NHibernate.Caches.Redis
         /// <returns></returns>
         public long LockCow(long sessionId, object key)
         {
- 
-            //1. if key is not in cow store, then create item (with null version and value)
-             // (lock count set to one in constructor)
+            // 0. fetch: generation and increment lock on this key
 
-            //3. else increment lock on existing item
+            //1. if generation is out of synch, try again
+
             return 0;
         }
         /// <summary>
@@ -491,9 +487,10 @@ namespace NHibernate.Caches.Redis
         public long UnlockCow(long sessionId, object key, bool writeBack)
         {
   
-            //1. decrement lock count on item
+            //1. fetch generation, backing store item, and cow item, and decrement lock  on this key
 
-            //2. if lock count is at zero, and writeBack is true, then update backing store, 
+            //2. if lock count is at zero, and writeBack is true, then
+            // copy item back to backing store, 
             // and delete item from cow store
 
             return 0;
@@ -576,8 +573,7 @@ namespace NHibernate.Caches.Redis
             int rc = 0;
             using (var disposable = new DisposableClient(_clientManager))
             {
-                CustomRedisClient client = disposable.Client;
-                rc = client.FetchGeneration(_cacheNamespace.GetGenerationKey());
+                rc = disposable.Client.FetchGeneration(_cacheNamespace.GetGenerationKey());
             }
             return rc;
         }

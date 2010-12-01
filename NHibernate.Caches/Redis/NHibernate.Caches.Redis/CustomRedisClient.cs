@@ -19,7 +19,6 @@ namespace NHibernate.Caches.Redis
         public void Lock(string lockKey)
         {
             var temp = new byte[1];
-            temp[0] = 1;  
             int wasSet = SetNX(lockKey, temp);
             while (wasSet == 0)
             {
@@ -30,10 +29,8 @@ namespace NHibernate.Caches.Redis
 
         public void Unlock(string lockKey)
         {
-
            Del(lockKey);           
         }
-
 
         public int FetchGeneration(string generationKey)
         {
@@ -60,14 +57,12 @@ namespace NHibernate.Caches.Redis
         }
         // Deserialize buffer to object
         public  object Deserialize(byte[] someBytes)
-        {
-            
+        {            
             _memoryStream.Seek(0, 0);
             _memoryStream.Write(someBytes, 0, someBytes.Length);
             _memoryStream.Seek(0, 0);
             var de = (DictionaryEntry)_bf.Deserialize(_memoryStream);
             return de.Value;
         }
-
     }
 }

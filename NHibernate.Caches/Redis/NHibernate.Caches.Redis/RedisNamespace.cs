@@ -9,21 +9,24 @@ namespace NHibernate.Caches.Redis
     public class RedisNamespace
     {
 
-        private const string SeparatorOuter = "#";
-        private const string SeparatorInner = "?";
+        private const string UniqueCharacter = "?";
 
-        //#?#
-        private const string NamespaceSeparator = SeparatorOuter + SeparatorInner + SeparatorOuter;
+        //make reserved keys unique by tacking N of these to the beginning of the string
+        private const string ReservedTag = "@" + UniqueCharacter + "@";
 
-        //?#
-        public const string Uniqueifier = SeparatorInner + SeparatorOuter;
+        //unique separator between namespace and key
+        private const string NamespaceKeySeparator = "#" + UniqueCharacter + "#";
 
+        //make non-static keys unique by tacking on N of these to the end of the string
+        public const string KeyTag = "%" + UniqueCharacter + "%";
 
-        //??
-        private const string Sanitizer = SeparatorInner + SeparatorInner;
+        public const string NamespaceTag = "!" + UniqueCharacter + "!";
 
-        // strings that only have odd-numbered runs SeparatorInner characters in them,
-        // and do not end with SeparatorOuter SeparatorInner,
+        //remove any odd numbered runs of the UniqueCharacter character
+        private const string Sanitizer = UniqueCharacter + UniqueCharacter;
+
+        // strings that only have odd-numbered runs UniqueCharacter characters in them,
+        // and do not end with SeparatorOuter UniqueCharacter,
         // are valid, reserved names
 
         // namespace generation - generation changes namespace is slated for garbage collection
@@ -41,18 +44,20 @@ namespace NHibernate.Caches.Redis
         // key for set of all global keys in this namespace
         private readonly string _globalKeysKey;
 
-        // key for list keys slated for garbage collection
-        // (having a single uniqueifier guarantees uniqueness for this key)
-        public static string NamespacesGarbageKey = Uniqueifier + "NHREDIS_NAMESPACES_GARBAGE";
+        // key for list of keys slated for garbage collection
+        // (having two flanking uniqueifiers guarantees uniqueness for this key)
+        public const string NamespacesGarbageKey = ReservedTag + "NHREDIS_NAMESPACES_GARBAGE";
 
-        private int uniqueCount = 1;
-
+  
+        public const int NumTagsForCowLockCountKey = 1;
+        public const int NumTagsForCowKey = 2;
+        public const int NumTagsForGlobalLockKey = 3;
 
         public RedisNamespace(string name)
         {
             _namespacePrefix = Sanitize(name);
 
-            _namespaceReservedName = MakeUnique(_namespacePrefix);
+            _namespaceReservedName = NamespaceTag + _namespacePrefix;
 
             _globalKeysKey = _namespaceReservedName;
 
@@ -90,31 +95,19 @@ namespace NHibernate.Caches.Redis
         {
             var rc = Sanitize(key);
             if (_namespacePrefix != null && !_namespacePrefix.Equals(""))
-                rc = _namespacePrefix + "_" + _namespaceGeneration.ToString() + NamespaceSeparator + rc;
-            for (int i = 0; i < numUniquePrefixes; ++i )
-                rc = Uniqueifier + rc;
+                rc = _namespacePrefix + "_" + _namespaceGeneration.ToString() + NamespaceKeySeparator + rc;
+            for (int i = 0; i < numUniquePrefixes; ++i)
+                rc += KeyTag;
             return rc;
-        }
-        public string GlobalLockKey(object key)
-        {
-            return Uniqueifier + GlobalKey(key, 0);
         }
         private static string Sanitize(string dirtyString)
         {
-            return dirtyString == null ? null : dirtyString.Replace(SeparatorInner, Sanitizer);
+            return dirtyString == null ? null : dirtyString.Replace(UniqueCharacter, Sanitizer);
         }
 
         private static string Sanitize(object dirtyString)
         {
             return Sanitize(dirtyString.ToString());
-        }
-        private string MakeUnique(string myString)
-        {
-            for (int i = 0; i < uniqueCount; ++i)
-                myString = Uniqueifier + myString;
-            uniqueCount++;
-            return myString;
-
         }
     }
 }
