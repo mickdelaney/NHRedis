@@ -27,7 +27,7 @@ namespace NHibernate.Caches.Redis
         // are valid, reserved names
 
         // namespace generation - generation changes namespace is slated for garbage collection
-        private int _namespaceGeneration = -1;
+        private long _namespaceGeneration = -1;
 
         // key for namespace generation
         private readonly string _namespaceGenerationKey;
@@ -63,11 +63,11 @@ namespace NHibernate.Caches.Redis
 
 
 
-        public int GetGeneration()
+        public long GetGeneration()
         {
             return _namespaceGeneration;
         }
-        public void SetGeneration(int generation)
+        public void SetGeneration(long generation)
         {
              _namespaceGeneration = generation;
         }
