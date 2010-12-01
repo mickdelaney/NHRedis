@@ -25,10 +25,6 @@ namespace NHibernate.Caches.Redis
         //remove any odd numbered runs of the UniqueCharacter character
         private const string Sanitizer = UniqueCharacter + UniqueCharacter;
 
-        // strings that only have odd-numbered runs UniqueCharacter characters in them,
-        // and do not end with SeparatorOuter UniqueCharacter,
-        // are valid, reserved names
-
         // namespace generation - generation changes namespace is slated for garbage collection
         private long _namespaceGeneration = -1;
 
@@ -48,10 +44,10 @@ namespace NHibernate.Caches.Redis
         // (having two flanking uniqueifiers guarantees uniqueness for this key)
         public const string NamespacesGarbageKey = ReservedTag + "NHREDIS_NAMESPACES_GARBAGE";
 
-  
+        public const int NumTagsForKey = 0;
         public const int NumTagsForCowLockCountKey = 1;
         public const int NumTagsForCowKey = 2;
-        public const int NumTagsForGlobalLockKey = 3;
+        public const int NumTagsForLockKey = 3;
 
         public RedisNamespace(string name)
         {

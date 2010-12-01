@@ -154,7 +154,7 @@ namespace NHibernate.Caches.Redis
                         {
                             trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
                                                x => generationFromServer = Convert.ToInt32(x));
-                            trans.QueueCommand(r => ((RedisNativeClient) r).Get(_cacheNamespace.GlobalKey(key, 0)),
+                            trans.QueueCommand(r => ((RedisNativeClient) r).Get(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey)),
                                                x => maybeObj = x);
                             trans.Commit();
                         }
@@ -180,10 +180,10 @@ namespace NHibernate.Caches.Redis
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="sessionId"></param>
+        /// <param name="concurrencyId"></param>
         /// <param name="key"></param>
         /// <returns></returns>
-        public object Get(long sessionId, object key)
+        public object Get(long concurrencyId, object key)
         {
             if (key == null)
             {
@@ -193,8 +193,8 @@ namespace NHibernate.Caches.Redis
             {
                 Log.DebugFormat("fetching object {0} from the cache", key);
             }
-            byte[] maybeObj = null;
-            object rc = null;
+            byte[] backingStoreItemBytes = null;
+            byte[] cowStoreItemBytes = null;
             try
             {
                 using (var disposable = new DisposableClient(_clientManager))
@@ -211,8 +211,11 @@ namespace NHibernate.Caches.Redis
                         {
                             trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
                                                x => generationFromServer = Convert.ToInt32(x));
-                            trans.QueueCommand(r => ((RedisNativeClient) r).Get(_cacheNamespace.GlobalKey(key, 0)),
-                                               x => maybeObj = x);
+                            trans.QueueCommand(r => ((RedisNativeClient) r).Get(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey)),
+                                               x => backingStoreItemBytes = x);
+                            trans.QueueCommand(r => ((RedisNativeClient)r).Get(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForCowKey)),
+                                               x => cowStoreItemBytes = x);
+                            
                             trans.Commit();
                         }
                         if (generationFromServer != GetGeneration())
@@ -223,7 +226,12 @@ namespace NHibernate.Caches.Redis
                         else
                             break;
                     }
-                    rc = maybeObj == null ? null : client.Deserialize(maybeObj);
+                    if (cowStoreItemBytes != null)
+                      return client.Deserialize(cowStoreItemBytes);
+
+                    return  backingStoreItemBytes == null ? null : 
+                                client.Deserialize(backingStoreItemBytes) as ReadWriteCachedItem;
+
                 }
 
             }
@@ -231,10 +239,7 @@ namespace NHibernate.Caches.Redis
             {
                 Log.WarnFormat("could not get: {0}", key);
                 throw;
-            }
-           
-
-            return rc;
+            }          
         
         }
         /// <summary>
@@ -302,12 +307,12 @@ namespace NHibernate.Caches.Redis
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="sessionId"></param>
+        /// <param name="concurrencyId"></param>
         /// <param name="key"></param>
         /// <param name="value"></param>
         /// <param name="version"></param>
         /// <param name="versionComparator"></param>
-        public void Put(long sessionId, object key, object value, object version, IComparer versionComparator)
+        public void Put(long concurrencyId, object key, object value, object version, IComparer versionComparator)
         {
             if (key == null)
             {
@@ -432,7 +437,7 @@ namespace NHibernate.Caches.Redis
             {
                 using (var disposable = new DisposableClient(_clientManager))
                 {
-                    disposable.Client.Lock(_cacheNamespace.GlobalKey(key,RedisNamespace.NumTagsForGlobalLockKey));
+                    disposable.Client.Lock(_cacheNamespace.GlobalKey(key,RedisNamespace.NumTagsForLockKey));
                 }
             }
             catch (Exception)
@@ -452,7 +457,7 @@ namespace NHibernate.Caches.Redis
             {
                 using (var disposable = new DisposableClient(_clientManager))
                 {
-                    disposable.Client.Unlock(_cacheNamespace.GlobalKey(key,RedisNamespace.NumTagsForGlobalLockKey));
+                    disposable.Client.Unlock(_cacheNamespace.GlobalKey(key,RedisNamespace.NumTagsForLockKey));
                 }
 
             }
@@ -466,32 +471,80 @@ namespace NHibernate.Caches.Redis
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="sessionId"></param>
+        /// <param name="concurrencyId"></param>
         /// <param name="key"></param>
         /// <param name="version"></param>
         /// <returns></returns>
-        public long LockCow(long sessionId, object key)
+        public long LockCow(long concurrencyId, object key)
         {
-            // 0. fetch: generation and increment lock on this key
+            // 0. fetch generation and increment lock on this key
 
-            //1. if generation is out of synch, try again
+            if (key == null)
+            {
+                return -1;
+            }
+            if (Log.IsDebugEnabled)
+            {
+                Log.DebugFormat("fetching object {0} from the cache", key);
+            }
+            int lockCount = -1;
+            try
+            {
+                using (var disposable = new DisposableClient(_clientManager))
+                {
+                    CustomRedisClient client = disposable.Client;
+                    //do transactioned get of generation and value
+                    //if it succeeds, and null is returned, then either the key doesn't exist or
+                    // our generation is out of date. In the latter case , update generation and try
+                    // again.
+                    var generationFromServer = GetGeneration();
 
-            return 0;
+       
+                    while (true)
+                    {
+                        using (var trans = ((RedisClient)client).CreateTransaction())
+                        {
+                            trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
+                                               x => generationFromServer = Convert.ToInt32(x));
+                            trans.QueueCommand(r => r.IncrementValueInHash(_cacheNamespace.GetGenerationKey(),concurrencyId.ToString(),1),
+                                                x => lockCount = Convert.ToInt32(x));
+                            trans.Commit();
+                        }
+                        if (generationFromServer != GetGeneration())
+                        {
+                            //update cached generation value, and try again
+                            _cacheNamespace.SetGeneration(generationFromServer);
+                        }
+                        else
+                            break;
+                    }
+
+
+                }
+
+            }
+            catch (Exception)
+            {
+                Log.WarnFormat("could not get: {0}", key);
+                throw;
+            }         
+            return lockCount;
         }
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="sessionId"></param>
+        /// <param name="concurrencyId"></param>
         /// <param name="key"></param>
         /// <returns></returns>
-        public long UnlockCow(long sessionId, object key, bool writeBack)
+        public long UnlockCow(long concurrencyId, object key, bool writeBack)
         {
   
             //1. fetch generation, backing store item, and cow item, and decrement lock  on this key
 
             //2. if lock count is at zero, and writeBack is true, then
             // copy item back to backing store, 
-            // and delete item from cow store
+            // delete item from cow store
+            // and delete lock counter
 
             return 0;
         }
