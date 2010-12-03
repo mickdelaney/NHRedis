@@ -99,14 +99,6 @@ namespace NHibernate.Caches.Redis
 			return Timestamper.Next();
 		}
 
-	    public long NextConcurrencyId()
-	    {
-	        synchConcurrencyIds();
-	        long id = nextConcurrencyId;
-	        nextConcurrencyId++;
-	        return id;
-	    }
-
 	    public void Start(IDictionary<string, string> properties)
 		{
 			// Needs to lock staticly because the pool and the internal maintenance thread
@@ -131,9 +123,6 @@ namespace NHibernate.Caches.Redis
                                                     new List<string>(), poolConfig);
                     _clientManager.RedisClientFactory = new CustomRedisClientFactory();
 
-                    synchConcurrencyIds();
-                                                 
-
                 }
                 GarbageCollector.Start();
 			}
@@ -152,24 +141,6 @@ namespace NHibernate.Caches.Redis
 
 		#endregion
 
-        private void synchConcurrencyIds()
-        {
-            if (nextConcurrencyId == -1 || nextConcurrencyId == concurrencyIdUpperLimit)
-            {
-                IRedisClient client = null;
-                try
-                {
-                    client = _clientManager.GetClient();
-                    concurrencyIdUpperLimit = client.IncrementValueBy(concurrencyIdKey, concurrencyIdBlockSize);
-                    nextConcurrencyId = concurrencyIdUpperLimit - concurrencyIdBlockSize;
-                }
-                finally
-                {
-                    _clientManager.DisposeClient((RedisNativeClient)client);
-                   
-                }
-
-            }
-        }
+     
 	}
 }

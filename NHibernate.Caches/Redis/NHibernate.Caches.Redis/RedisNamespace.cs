@@ -45,9 +45,7 @@ namespace NHibernate.Caches.Redis
         public const string NamespacesGarbageKey = ReservedTag + "NHREDIS_NAMESPACES_GARBAGE";
 
         public const int NumTagsForKey = 0;
-        public const int NumTagsForCowLockCountKey = 1;
-        public const int NumTagsForCowKey = 2;
-        public const int NumTagsForLockKey = 3;
+        public const int NumTagsForLockKey = 1;
 
         public RedisNamespace(string name)
         {

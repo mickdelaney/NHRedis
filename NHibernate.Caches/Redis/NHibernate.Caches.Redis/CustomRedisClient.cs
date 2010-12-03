@@ -50,6 +50,8 @@ namespace NHibernate.Caches.Redis
         // Serialize object to buffer
         public  byte[] Serialize(object value)
         {
+            if (value == null)
+                return null;
             var dictEntry = new DictionaryEntry(null, value);
             _memoryStream.Seek(0, 0);
             _bf.Serialize(_memoryStream, dictEntry);
@@ -57,7 +59,9 @@ namespace NHibernate.Caches.Redis
         }
         // Deserialize buffer to object
         public  object Deserialize(byte[] someBytes)
-        {            
+        {         
+            if (someBytes == null)
+                return null;
             _memoryStream.Seek(0, 0);
             _memoryStream.Write(someBytes, 0, someBytes.Length);
             _memoryStream.Seek(0, 0);
