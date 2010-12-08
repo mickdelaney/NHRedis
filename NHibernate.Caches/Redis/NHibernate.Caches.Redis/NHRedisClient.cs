@@ -249,8 +249,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="versionComparator"></param>
         public void Put(object key, object value, object version, IComparer versionComparator)
         {
-             // lock on key before doing put
-            // TODO: use watch for non-locking implementation
+            // TODO: use watch for optimistic, non-locking implementation
             var item = Get(key) as ReadWriteCachedItem;
             if (item != null && !item.IsPuttable(0, version, versionComparator))
                 return;
@@ -297,7 +296,7 @@ namespace NHibernate.Caches.Redis
                 using (var trans = client.CreateTransaction())
                 {
                     trans.QueueCommand(
-                        r => _cacheNamespace.SetGeneration(r.IncrementValue(_cacheNamespace.GetGenerationKey())));
+                        r => r.IncrementValue(_cacheNamespace.GetGenerationKey()), x =>  _cacheNamespace.SetGeneration(x) );
                     var temp = "temp_" + _cacheNamespace.GetGlobalKeysKey() + "_" + GetGeneration().ToString();
                     trans.QueueCommand(r => ((RedisNativeClient) r).Rename(_cacheNamespace.GetGlobalKeysKey(), temp));
                     trans.QueueCommand(r => r.AddItemToList(RedisNamespace.NamespacesGarbageKey, temp));
