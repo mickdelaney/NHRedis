@@ -253,7 +253,7 @@ namespace NHibernate.Caches.Redis
             var item = Get(key) as ReadWriteCachedItem;
             if (item != null && !item.IsPuttable(0, version, versionComparator))
                 return;
-            Put(key, new LockableCachedItem(value, version, versionComparator));
+            Put(key, new LockableCachedItem(value, version));
         }
         /// <summary>
         /// 
