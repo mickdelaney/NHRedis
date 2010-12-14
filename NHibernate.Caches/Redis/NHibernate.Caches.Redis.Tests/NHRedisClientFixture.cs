@@ -25,6 +25,7 @@
 #endregion
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
 using log4net.Config;
@@ -129,6 +130,64 @@ namespace NHibernate.Caches.Redis.Tests
             ICache cache = new NhRedisClient();
 			Assert.Throws<ArgumentNullException>(() => cache.Put("nunit", null));
 		}
+
+        public class SimpleComparer : IComparer
+        {
+
+            public int Compare(Object x, Object y)
+            {
+                if (x == null && y == null)
+                    return 0;
+                if (x == null)
+                    return int.MinValue;
+                else if (y == null)
+                    return int.MaxValue;
+                else
+                    return (int)x - (int)y;
+            }
+
+        }
+
+        [Test]
+        public void TestVersionedPut()
+        {
+            const string key = "key1";
+
+            SimpleComparer comparer = new SimpleComparer();
+            var cache = _provider.BuildCache(typeof(String).FullName, new Dictionary<string, string>());
+
+            int version1 = 1;
+            string value1 = "value1";
+
+            int version2 = 2;
+            string value2 = "value2";
+
+            int version3 = 3;
+            string value3 = "value3";
+
+            cache.Clear();
+
+
+            //check if object is cached correctly
+            cache.Put(key, value1, version1, comparer);
+            var val = cache.Get(key) as LockableCachedItem;
+            Assert.AreEqual(val.Value, value1);
+
+            // check that object changes with next version
+            cache.Put(key, value2, version2, comparer);
+            val = cache.Get(key) as LockableCachedItem;
+            Assert.AreEqual(val.Value, value2);
+
+            // check that older version does not change cache
+            cache.Put(key, value3, version1, comparer);
+            val = cache.Get(key) as LockableCachedItem;
+            Assert.AreEqual(val.Value, value2);       val = cache.Get(key) as LockableCachedItem;
+            Assert.AreEqual(val.Value, value2);
+
+   
+
+
+        }
 
 		[Test]
 		public void TestPut()
