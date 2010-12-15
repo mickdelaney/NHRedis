@@ -25,7 +25,7 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
+    <OutputPath>..\..\..\..\..\ReferencedAssemblies\NHibernate\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
@@ -54,6 +54,7 @@
     <Compile Include="CustomRedisClientFactory.cs" />
     <Compile Include="DisposableClient.cs" />
     <Compile Include="NHRedisClient.cs" />
+    <Compile Include="NHRedisException.cs" />
     <Compile Include="RedisConfig.cs" />
     <Compile Include="RedisGarbageCollector.cs" />
     <Compile Include="RedisNamespace.cs" />

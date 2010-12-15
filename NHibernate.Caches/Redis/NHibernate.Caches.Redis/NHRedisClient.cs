@@ -29,6 +29,7 @@ using System.Collections;
 using System.Collections.Generic;
 using ServiceStack.Redis;
 using NHibernate.Cache;
+using ServiceStack.Redis.Pipeline;
 using Environment = NHibernate.Cfg.Environment;
 
 namespace NHibernate.Caches.Redis
@@ -48,7 +49,8 @@ namespace NHibernate.Caches.Redis
 
         // manage cache _region        
         private readonly RedisNamespace _cacheNamespace;
- 
+
+        private byte[] _bytesToCache;
 
    		static NhRedisClient()
 		{
@@ -249,11 +251,133 @@ namespace NHibernate.Caches.Redis
         /// <param name="versionComparator"></param>
         public void Put(object key, object value, object version, IComparer versionComparator)
         {
-            // TODO: use watch for optimistic, non-locking implementation
-            var item = Get(key) as ReadWriteCachedItem;
-            if (item != null && !item.IsPuttable(0, version, versionComparator))
+            if (key == null)
+            {
                 return;
-            Put(key, new LockableCachedItem(value, version));
+            }
+            if (Log.IsDebugEnabled)
+            {
+                Log.DebugFormat("fetching object {0} from the cache", key);
+            }
+            byte[] maybeObj = null;
+            IRedisPipeline pipe = null;
+            IRedisTransaction trans = null;
+            try
+            {
+                using (var disposable = new DisposableClient(_clientManager))
+                {
+                    CustomRedisClient client = disposable.Client;
+
+                    //watch for changes to generation key and cache key
+                    client.Watch(_cacheNamespace.GetGenerationKey(), 
+                                    _cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey));
+
+                    long generationFromServer = -1;
+
+                    pipe = client.CreatePipeline();
+                    pipe.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
+                                       x => generationFromServer = Convert.ToInt32(x));
+                    pipe.QueueCommand(r => ((RedisNativeClient)r).Get(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey)),
+                                       x => maybeObj = x);
+                    pipe.Flush();
+
+                    //make sure generation is correct before analyzing cache item
+                    while (generationFromServer != GetGeneration())
+                    {
+                        //update cached generation value, and try again
+                        _cacheNamespace.SetGeneration(generationFromServer);
+                        pipe.Replay();
+                    }
+
+                    // check if can we can put this new (value, version) into the cache
+                    LockableCachedItem item = generateNewCachedItem(maybeObj, value, version, versionComparator, client);
+                    if (item == null)
+                        return;
+                    _bytesToCache = client.Serialize(item);
+
+                    // put new item in cache
+                    trans = client.CreateTransaction();
+                    trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
+                                       x => generationFromServer = Convert.ToInt32(x));
+                    trans.QueueCommand(r => ((IRedisNativeClient) r).SetEx(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey),
+                                                        _expiry, newCachedItemBytes()));
+
+                    //add key to globalKeys set for this namespace
+                    trans.QueueCommand(r => r.AddItemToSet(_cacheNamespace.GetGlobalKeysKey(), 
+                        _cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey)));
+                    bool success = trans.Commit(); ;
+                    while (!success)
+                    {
+                        client.Watch(_cacheNamespace.GetGenerationKey(), 
+                            _cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey));
+
+                        pipe.Replay();
+
+                        //make sure generation is correct before analyzing cache item
+                        while (generationFromServer != GetGeneration())
+                        {
+                            //update cached generation value, and try again
+                            _cacheNamespace.SetGeneration(generationFromServer);
+                            pipe.Replay();
+                        }
+
+                        item = generateNewCachedItem(maybeObj, value, version, versionComparator, client);
+                        if (item == null)
+                            return;
+                        _bytesToCache = client.Serialize(item);
+                         success = trans.Replay();
+                    }
+
+                    // if we get here, we know that the generation has not been changed
+                    // otherwise, the WATCH would have failed the transaction
+                    _cacheNamespace.SetGeneration(generationFromServer);
+                }
+            }
+            catch (Exception)
+            {
+                Log.WarnFormat("could not get: {0}", key);
+                throw;
+            }
+            finally
+            {
+                if (pipe != null)
+                    pipe.Dispose();
+                if (trans != null)
+                    trans.Dispose();
+            }
+        }
+
+      
+        private byte[] newCachedItemBytes()
+        {
+            return _bytesToCache;
+        }
+        /// <summary>
+        /// New cache item. Null return indicates that we are not allowed to update the cache, due to versioning
+        /// </summary>
+        /// <param name="maybeObj"></param>
+        /// <param name="value"></param>
+        /// <param name="version"></param>
+        /// <param name="versionComparator"></param>
+        /// <param name="client"></param>
+        /// <returns></returns>
+        private LockableCachedItem generateNewCachedItem(byte[] maybeObj, object value, object version, IComparer versionComparator, CustomRedisClient client)
+        {
+            LockableCachedItem newItem = null;
+            object currentObject = maybeObj == null ? null : client.Deserialize(maybeObj);
+            var currentLockableCachedItem = currentObject as LockableCachedItem;
+            // this should never happen....
+            if (currentObject != null && currentLockableCachedItem == null)
+                throw new NHRedisException();
+            if (currentLockableCachedItem == null)
+                 newItem = new LockableCachedItem(value, version);
+            else if (currentLockableCachedItem.IsPuttable(0, version, versionComparator) )
+            {
+                currentLockableCachedItem.Update(value, version, versionComparator);
+                newItem = currentLockableCachedItem;
+            }
+            return newItem;
+            
         }
         /// <summary>
         /// 
@@ -298,7 +422,7 @@ namespace NHibernate.Caches.Redis
                     trans.QueueCommand(
                         r => r.IncrementValue(_cacheNamespace.GetGenerationKey()), x =>  _cacheNamespace.SetGeneration(x) );
                     var temp = "temp_" + _cacheNamespace.GetGlobalKeysKey() + "_" + GetGeneration().ToString();
-                    trans.QueueCommand(r => ((RedisNativeClient) r).Rename(_cacheNamespace.GetGlobalKeysKey(), temp));
+                    trans.QueueCommand(r => ((RedisNativeClient) r).Rename(_cacheNamespace.GetGlobalKeysKey(), temp), null, e => Log.Debug(e) );
                     trans.QueueCommand(r => r.AddItemToList(RedisNamespace.NamespacesGarbageKey, temp));
                     trans.Commit();
                 }

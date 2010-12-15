@@ -170,22 +170,19 @@ namespace NHibernate.Caches.Redis.Tests
 
             //check if object is cached correctly
             cache.Put(key, value1, version1, comparer);
-            var val = cache.Get(key) as LockableCachedItem;
-            Assert.AreEqual(val.Value, value1);
+            LockableCachedItem obj = cache.Get(key) as LockableCachedItem;
+            Assert.AreEqual(obj.Value, value1);
 
             // check that object changes with next version
             cache.Put(key, value2, version2, comparer);
-            val = cache.Get(key) as LockableCachedItem;
-            Assert.AreEqual(val.Value, value2);
+            obj = cache.Get(key) as LockableCachedItem;
+            Assert.AreEqual(obj.Value, value2);
 
             // check that older version does not change cache
             cache.Put(key, value3, version1, comparer);
-            val = cache.Get(key) as LockableCachedItem;
-            Assert.AreEqual(val.Value, value2);       val = cache.Get(key) as LockableCachedItem;
-            Assert.AreEqual(val.Value, value2);
-
-   
-
+            obj = cache.Get(key) as LockableCachedItem;
+            Assert.AreEqual(obj.Value, value2);
+       
 
         }
 
