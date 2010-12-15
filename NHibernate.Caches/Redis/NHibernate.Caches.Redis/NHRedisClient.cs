@@ -51,6 +51,7 @@ namespace NHibernate.Caches.Redis
         private readonly RedisNamespace _cacheNamespace;
 
         private byte[] _bytesToCache;
+        private Dictionary<object, LockableCachedItem> _prefetchCache = new Dictionary<object, LockableCachedItem>();
 
    		static NhRedisClient()
 		{
@@ -421,7 +422,7 @@ namespace NHibernate.Caches.Redis
                 {
                     trans.QueueCommand(
                         r => r.IncrementValue(_cacheNamespace.GetGenerationKey()), x =>  _cacheNamespace.SetGeneration(x) );
-                    var temp = "temp_" + _cacheNamespace.GetGlobalKeysKey() + "_" + GetGeneration().ToString();
+                    var temp = "temp_" + _cacheNamespace.GetGlobalKeysKey() + "_" + GetGeneration();
                     trans.QueueCommand(r => ((RedisNativeClient) r).Rename(_cacheNamespace.GetGlobalKeysKey(), temp), null, e => Log.Debug(e) );
                     trans.QueueCommand(r => r.AddItemToList(RedisNamespace.NamespacesGarbageKey, temp));
                     trans.Commit();
@@ -441,7 +442,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="key"></param>
 		public void Lock(object key)
 		{
-           /* try
+            try
             {
                 using (var disposable = new DisposableClient(_clientManager))
                 {
@@ -453,7 +454,7 @@ namespace NHibernate.Caches.Redis
                 Log.WarnFormat("could not acquire lock for key: {0}", key);
                 throw;
 
-            }*/
+            }
 		}
         /// <summary>
         /// 
@@ -461,7 +462,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="key"></param>
 		public void Unlock(object key)
 		{
-            /*
+            
             try
             {
                 using (var disposable = new DisposableClient(_clientManager))
@@ -474,7 +475,7 @@ namespace NHibernate.Caches.Redis
                 Log.WarnFormat("could not release lock for key: {0}", key);
                 throw;
             }
-             */
+             
 		}
    
         /// <summary>
@@ -516,7 +517,35 @@ namespace NHibernate.Caches.Redis
 			get { return _region; }
 		}
 
-		#endregion
+        public void Prefetch(IList keys)
+        {
+            using (var disposable = new DisposableClient(_clientManager))
+            {
+                var client = disposable.Client;
+                var globalKeys = new List<string>();
+                foreach (var key in keys)
+                {
+                    globalKeys.Add(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey));
+                }
+                var resultBytesArray = client.MGet(globalKeys.ToArray());
+                foreach (var resultBytes in resultBytesArray)
+                {
+                    if (resultBytes == null) continue;
+
+                    object currentObject = client.Deserialize(resultBytes);
+                    var currentLockableCachedItem = currentObject as LockableCachedItem;
+                }
+
+                
+            }
+        }
+
+        public void ClearPrefetchCache()
+        {
+           _prefetchCache.Clear();
+        }
+
+        #endregion
 
 
         /// <summary>
