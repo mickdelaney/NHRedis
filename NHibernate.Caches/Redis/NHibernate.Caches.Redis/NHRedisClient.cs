@@ -300,7 +300,7 @@ namespace NHibernate.Caches.Redis
                     trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
                                        x => generationFromServer = Convert.ToInt32(x));
                     trans.QueueCommand(r => ((IRedisNativeClient) r).SetEx(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey),
-                                                        _expiry, newCachedItemBytes()));
+                                                        _expiry, NewCachedItemBytes()));
 
                     //add key to globalKeys set for this namespace
                     trans.QueueCommand(r => r.AddItemToSet(_cacheNamespace.GetGlobalKeysKey(), 
@@ -348,7 +348,7 @@ namespace NHibernate.Caches.Redis
         }
 
       
-        private byte[] newCachedItemBytes()
+        private byte[] NewCachedItemBytes()
         {
             return _bytesToCache;
         }
@@ -441,7 +441,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="key"></param>
 		public void Lock(object key)
 		{
-            try
+           /* try
             {
                 using (var disposable = new DisposableClient(_clientManager))
                 {
@@ -453,7 +453,7 @@ namespace NHibernate.Caches.Redis
                 Log.WarnFormat("could not acquire lock for key: {0}", key);
                 throw;
 
-            }
+            }*/
 		}
         /// <summary>
         /// 
@@ -461,6 +461,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="key"></param>
 		public void Unlock(object key)
 		{
+            /*
             try
             {
                 using (var disposable = new DisposableClient(_clientManager))
@@ -473,6 +474,7 @@ namespace NHibernate.Caches.Redis
                 Log.WarnFormat("could not release lock for key: {0}", key);
                 throw;
             }
+             */
 		}
    
         /// <summary>
