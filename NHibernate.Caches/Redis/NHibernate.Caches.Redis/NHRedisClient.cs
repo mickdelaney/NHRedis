@@ -397,7 +397,7 @@ namespace NHibernate.Caches.Redis
             {
                 using (var disposable = new DisposableClient(_clientManager))
                 {
-                    disposable.Client.Del(_cacheNamespace.GlobalKey(key, 0));
+                    disposable.Client.Del(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey));
                 }
             }
             catch (Exception)
@@ -516,9 +516,9 @@ namespace NHibernate.Caches.Redis
 			get { return _region; }
 		}
 
-        public   IDictionary<CacheKey, object> Prefetch(IEnumerable<CacheKey> keys)
+        public IDictionary MultiGet(IEnumerable keys)
         {
-            var rc = new Dictionary<CacheKey,object>();
+            var rc = new Dictionary<object,object>();
             using (var disposable = new DisposableClient(_clientManager))
             {
                 var client = disposable.Client;
@@ -536,21 +536,44 @@ namespace NHibernate.Caches.Redis
                     throw new RedisException("Prefetch: number of results does not match number of keys");
 
                 //process results
-                IEnumerator<CacheKey> iter = keys.GetEnumerator();              
+                IEnumerator iter = keys.GetEnumerator();   
+                iter.MoveNext();
                 foreach (byte[] resultBytes in resultBytesArray)
                 {
-                    if (resultBytes == null) continue;
-
-                    var currentObject = client.Deserialize(resultBytes);
-                    var currentLockableCachedItem = currentObject as LockableCachedItem;
-                    if (currentLockableCachedItem != null)
-                        rc[iter.Current] = currentLockableCachedItem.Value;
+                    if (resultBytes != null)
+                    {
+                        var currentObject = client.Deserialize(resultBytes);
+                        var currentLockableCachedItem = currentObject as CachedItem;
+                        if (currentLockableCachedItem != null)
+                            rc[iter.Current] = currentLockableCachedItem.Value;
+                    }
                     iter.MoveNext();
                 }
             }
             return rc;
         }
 
+        public bool SAdd(object key, object value)
+        {
+            int rc = 0;
+            using (var disposable = new DisposableClient(_clientManager))
+            {
+                byte[] bytes = disposable.Client.Serialize(value);
+                rc = disposable.Client.SAdd(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey),bytes);
+            }
+            return rc == 1;
+        }
+
+        public bool SRemove(object key, object value)
+        {
+            int rc = 0;
+            using (var disposable = new DisposableClient(_clientManager))
+            {
+                byte[] bytes = disposable.Client.Serialize(value);
+                rc = disposable.Client.SRem(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey), bytes);
+            }
+            return rc == 1;
+        }
 
         #endregion
 

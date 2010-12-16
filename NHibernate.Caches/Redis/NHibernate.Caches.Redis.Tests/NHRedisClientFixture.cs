@@ -149,6 +149,44 @@ namespace NHibernate.Caches.Redis.Tests
         }
 
         [Test]
+        public void TestMultiGet()
+        {
+            var cache = _provider.BuildCache(typeof(String).FullName, new Dictionary<string, string>());
+
+            List<string> keys = new List<string>()
+                                    {
+                                        "key1", "key2", "key3"
+                                    };
+
+
+            List<string> vals = new List<string>()
+                                    {
+                                        "value1", "value2", "value3"
+                                    };
+            for (int i = 0; i < keys.Count; ++i )
+                cache.Put(keys[i], new CachedItem(vals[i],0));
+
+            IDictionary pre = cache.MultiGet(keys);
+            for (int i = 0; i < keys.Count; ++i)
+            {
+                Assert.IsTrue(pre.Contains(keys[i]));
+                Assert.AreEqual(vals[i], pre[keys[i]]);
+            }
+
+            //test with "expired" key - at index 1
+            cache.Remove(keys[1]);
+            pre = cache.MultiGet(keys);
+            keys.RemoveAt(1);
+            vals.RemoveAt(1);
+            for (int i = 0; i < keys.Count; ++i)
+            {
+                Assert.IsTrue(pre.Contains(keys[i]));
+                Assert.AreEqual(vals[i], pre[keys[i]]);
+            }
+
+        }
+
+	    [Test]
         public void TestVersionedPut()
         {
             const string key = "key1";
