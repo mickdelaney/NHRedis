@@ -51,7 +51,6 @@ namespace NHibernate.Caches.Redis
         private readonly RedisNamespace _cacheNamespace;
 
         private byte[] _bytesToCache;
-        private Dictionary<object, LockableCachedItem> _prefetchCache = new Dictionary<object, LockableCachedItem>();
 
    		static NhRedisClient()
 		{
@@ -517,33 +516,41 @@ namespace NHibernate.Caches.Redis
 			get { return _region; }
 		}
 
-        public void Prefetch(IList keys)
+        public   IDictionary<CacheKey, object> Prefetch(IEnumerable<CacheKey> keys)
         {
+            var rc = new Dictionary<CacheKey,object>();
             using (var disposable = new DisposableClient(_clientManager))
             {
                 var client = disposable.Client;
                 var globalKeys = new List<string>();
+                //generate global keys
+                int keyCount = 0;
                 foreach (var key in keys)
                 {
+                    keyCount++;
                     globalKeys.Add(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey));
                 }
+                // do multi get
                 var resultBytesArray = client.MGet(globalKeys.ToArray());
-                foreach (var resultBytes in resultBytesArray)
+                if (keyCount != resultBytesArray.Length)
+                    throw new RedisException("Prefetch: number of results does not match number of keys");
+
+                //process results
+                IEnumerator<CacheKey> iter = keys.GetEnumerator();              
+                foreach (byte[] resultBytes in resultBytesArray)
                 {
                     if (resultBytes == null) continue;
 
-                    object currentObject = client.Deserialize(resultBytes);
+                    var currentObject = client.Deserialize(resultBytes);
                     var currentLockableCachedItem = currentObject as LockableCachedItem;
+                    if (currentLockableCachedItem != null)
+                        rc[iter.Current] = currentLockableCachedItem.Value;
+                    iter.MoveNext();
                 }
-
-                
             }
+            return rc;
         }
 
-        public void ClearPrefetchCache()
-        {
-           _prefetchCache.Clear();
-        }
 
         #endregion
 
