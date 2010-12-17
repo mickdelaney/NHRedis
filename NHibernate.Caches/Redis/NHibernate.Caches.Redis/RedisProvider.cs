@@ -45,12 +45,6 @@ namespace NHibernate.Caches.Redis
 
         private static readonly RedisGarbageCollector GarbageCollector;
 
-	    private static readonly int concurrencyIdBlockSize = 100000;
-	    private static long nextConcurrencyId=-1;
-	    private static long concurrencyIdUpperLimit=-1;
-
-	    private static readonly string concurrencyIdKey = RedisNamespace.KeyTag + "NHREDIS_CONCURRENCY_IDS";
-
 		static RedisProvider()
 		{
 			Log = LoggerProvider.LoggerFor(typeof (RedisProvider));
