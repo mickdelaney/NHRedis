@@ -316,44 +316,5 @@ namespace NHibernate.Caches.Redis.Tests
 			item = cache.Get(key);
 			Assert.IsNull(item, "item still exists in cache");
 		}
-
-		[Test]
-		public void TestRemove144()
-		{
-			const string key = "key1";
-			const string value = "value";
-
-			//memcached 1.4+ drops support for expiration time specified for Delete operations
-			//therefore if you install memcached 1.4.4 this test will fail unless corresponding fix is implemented in MemCacheClient.cs
-			//the test will fail because Remove won't actually delete the item from the cache!
-			//the error you will see in the log is: "Error deleting key: nunit@key1.  Server response: CLIENT_ERROR bad command line format.  Usage: delete <key> [noreply]"
-
-			//Now, Memcached.ClientLibrary incorrectly divides expiration time for Delete operation by 1000
-			//(for Add and Set operations the expiration time is calculated correctly)
-			//that's why we need to set expiration to 20000, otherwise it will be treated as 20ms which is too small to be sent to server (the minimum value is 1 second)
-			_props["expiration"] = "20000";
-
-			//disabling lingering delete will cause the item to get immediately deleted
-			//this parameter is NEW and the code to make it work is part of the proposed fix
-			_props.Add("lingering_delete_disabled", "true");
-
-			var cache = _provider.BuildCache("nunit", _props);
-			Assert.IsNotNull(cache, "no cache returned");
-
-			// add the item
-			cache.Put(key, value);
-			Thread.Sleep(1000);
-
-			// make sure it's there
-			var item = cache.Get(key);
-			Assert.IsNotNull(item, "item just added is not there");
-
-			// remove it
-			cache.Remove(key);
-
-			// make sure it's not there
-			item = cache.Get(key);
-			Assert.IsNull(item, "item still exists in cache");
-		}
 	}
 }
