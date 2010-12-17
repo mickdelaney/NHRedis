@@ -149,6 +149,40 @@ namespace NHibernate.Caches.Redis.Tests
         }
 
         [Test]
+        public void TestSAdd()
+        {
+            var cache = _provider.BuildCache(typeof(String).FullName, new Dictionary<string, string>());
+            Assert.IsFalse(cache.SRemove("key", "value"));
+            cache.SAdd("key", "value");
+            Assert.IsTrue(cache.SRemove("key","value"));
+            Assert.IsFalse(cache.SRemove("key", "value"));
+        }
+        
+        [Test]
+        public void TestSMembers()
+        {
+            var cache = _provider.BuildCache(typeof(String).FullName, new Dictionary<string, string>());
+
+            string key = "key";
+            cache.Remove(key);
+
+            var vals = new ArrayList()
+                                    {
+                                        "value1", "value2", "value3"
+                                    };
+            for (int i = 0; i < vals.Count; ++i)
+                cache.SAdd(key, vals[i]);
+
+            IEnumerable members = cache.SMembers(key);
+            foreach (var member in members)
+            {
+                Assert.IsTrue(vals.Contains(member));
+            }
+            
+            
+         }
+
+	    [Test]
         public void TestMultiGet()
         {
             var cache = _provider.BuildCache(typeof(String).FullName, new Dictionary<string, string>());
@@ -164,7 +198,7 @@ namespace NHibernate.Caches.Redis.Tests
                                         "value1", "value2", "value3"
                                     };
             for (int i = 0; i < keys.Count; ++i )
-                cache.Put(keys[i], new CachedItem(vals[i],0));
+                cache.Put(keys[i], vals[i]);
 
             IDictionary pre = cache.MultiGet(keys);
             for (int i = 0; i < keys.Count; ++i)

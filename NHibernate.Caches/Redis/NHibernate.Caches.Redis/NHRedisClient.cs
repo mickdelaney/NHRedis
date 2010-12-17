@@ -243,7 +243,8 @@ namespace NHibernate.Caches.Redis
             }
        	}
         /// <summary>
-        /// 
+        /// Puts a LockedCacheableItem corresponding to (value, version) into
+        /// the cache
         /// </summary>
         /// <param name="key"></param>
         /// <param name="value"></param>
@@ -380,7 +381,7 @@ namespace NHibernate.Caches.Redis
             
         }
         /// <summary>
-        /// 
+        /// Remove item corresponding to key from cache
         /// </summary>
         /// <param name="key"></param>
         public void Remove(object key)
@@ -516,6 +517,11 @@ namespace NHibernate.Caches.Redis
 			get { return _region; }
 		}
 
+        /// <summary>
+        /// Return a dictionary of (key,value) pairs corresponding to a collection of keys
+        /// </summary>
+        /// <param name="keys"></param>
+        /// <returns></returns>
         public IDictionary MultiGet(IEnumerable keys)
         {
             var rc = new Dictionary<object,object>();
@@ -543,16 +549,28 @@ namespace NHibernate.Caches.Redis
                     if (resultBytes != null)
                     {
                         var currentObject = client.Deserialize(resultBytes);
-                        var currentLockableCachedItem = currentObject as CachedItem;
-                        if (currentLockableCachedItem != null)
-                            rc[iter.Current] = currentLockableCachedItem.Value;
+                        if (currentObject != null)
+                            rc[iter.Current] = currentObject;
                     }
                     iter.MoveNext();
                 }
             }
             return rc;
         }
-
+        public IEnumerable SMembers(object key)
+        {
+            using (var disposable = new DisposableClient(_clientManager))
+            {
+                var members = disposable.Client.SMembers(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey));
+                IList rc = new ArrayList();
+                foreach(byte[] item in members)
+                {
+                    rc.Add(disposable.Client.Deserialize(item));
+                }
+                return rc;
+            }
+            
+        }
         public bool SAdd(object key, object value)
         {
             int rc = 0;
