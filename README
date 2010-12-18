@@ -10,7 +10,7 @@ http://code.google.com/p/servicestack/wiki/ServiceStackRedis
 You can find native windows binaries for the Redis server here:
 https://github.com/dmajkic/redis/downloads
 
-Note: do not use these binaries in production. Use the unix builds.
+Note: do not use these windows Redis binaries in production. Use the unix builds.
 
 ==================================================================
 
