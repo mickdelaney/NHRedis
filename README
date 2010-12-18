@@ -7,9 +7,9 @@ This provider makes use of the excellent ServiceStackRedis
 http://code.google.com/p/servicestack/wiki/ServiceStackRedis
 
 
-You can find native windows binaries for the Redis server here:
+If you need to run the Redis server locally,  (for testing purposes only),
+you can find native windows binaries for the Redis server here:
 https://github.com/dmajkic/redis/downloads
-
 Note: do not use these windows Redis binaries in production. Use the unix builds.
 
 ==================================================================
