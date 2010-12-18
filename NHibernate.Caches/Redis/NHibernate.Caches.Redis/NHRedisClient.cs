@@ -242,6 +242,7 @@ namespace NHibernate.Caches.Redis
                 throw;
             }
        	}
+        /*
         /// <summary>
         /// Puts a LockedCacheableItem corresponding to (value, version) into
         /// the cache
@@ -380,6 +381,8 @@ namespace NHibernate.Caches.Redis
             return newItem;
             
         }
+         */
+
         /// <summary>
         /// Remove item corresponding to key from cache
         /// </summary>

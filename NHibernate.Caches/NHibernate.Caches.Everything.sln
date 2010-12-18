@@ -9,8 +9,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NHibernate.Caches.Redis.Tes
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NHibernate.Caches.Redis", "Redis\NHibernate.Caches.Redis\NHibernate.Caches.Redis.csproj", "{D0364A9F-4EBB-42AB-9895-28BDCD588DC3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceStack.Redis", "..\..\..\..\servicestack-read-only\Common\ServiceStack.Redis\ServiceStack.Redis\ServiceStack.Redis.csproj", "{AF99F19B-4C04-4F58-81EF-B092F1FCC540}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -35,14 +33,6 @@ Global
 		{D0364A9F-4EBB-42AB-9895-28BDCD588DC3}.Release|Any CPU.Build.0 = Release|Any CPU
 		{D0364A9F-4EBB-42AB-9895-28BDCD588DC3}.STATIC_ONLY NO_EXPRESSIONS|Any CPU.ActiveCfg = Release|Any CPU
 		{D0364A9F-4EBB-42AB-9895-28BDCD588DC3}.STATIC_ONLY NO_EXPRESSIONS|Any CPU.Build.0 = Release|Any CPU
-		{AF99F19B-4C04-4F58-81EF-B092F1FCC540}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{AF99F19B-4C04-4F58-81EF-B092F1FCC540}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{AF99F19B-4C04-4F58-81EF-B092F1FCC540}.MonoTouch|Any CPU.ActiveCfg = MonoTouch|Any CPU
-		{AF99F19B-4C04-4F58-81EF-B092F1FCC540}.MonoTouch|Any CPU.Build.0 = MonoTouch|Any CPU
-		{AF99F19B-4C04-4F58-81EF-B092F1FCC540}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{AF99F19B-4C04-4F58-81EF-B092F1FCC540}.Release|Any CPU.Build.0 = Release|Any CPU
-		{AF99F19B-4C04-4F58-81EF-B092F1FCC540}.STATIC_ONLY NO_EXPRESSIONS|Any CPU.ActiveCfg = STATIC_ONLY NO_EXPRESSIONS|Any CPU
-		{AF99F19B-4C04-4F58-81EF-B092F1FCC540}.STATIC_ONLY NO_EXPRESSIONS|Any CPU.Build.0 = STATIC_ONLY NO_EXPRESSIONS|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

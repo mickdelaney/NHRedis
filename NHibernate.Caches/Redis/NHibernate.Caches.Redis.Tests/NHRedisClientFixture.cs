@@ -147,7 +147,7 @@ namespace NHibernate.Caches.Redis.Tests
             }
 
         }
-
+        /*
         [Test]
         public void TestSAdd()
         {
@@ -257,7 +257,7 @@ namespace NHibernate.Caches.Redis.Tests
        
 
         }
-
+        */
 		[Test]
 		public void TestPut()
 		{
