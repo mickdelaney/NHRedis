@@ -154,10 +154,10 @@ namespace NHibernate.Caches.Redis
                     {
                         using (var trans = ((RedisClient) client).CreateTransaction())
                         {
-                            trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
-                                               x => generationFromServer = Convert.ToInt32(x));
                             trans.QueueCommand(r => ((RedisNativeClient) r).Get(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey)),
                                                x => maybeObj = x);
+                            trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
+                                               x => generationFromServer = Convert.ToInt32(x));
                             trans.Commit();
                         }
                         if (generationFromServer != GetGeneration())
@@ -217,12 +217,13 @@ namespace NHibernate.Caches.Redis
                         using (var trans = client.CreateTransaction())
                         {
                             var globalKey = _cacheNamespace.GlobalKey(key, 0);
-                            trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
-                                               x => generationFromServer = Convert.ToInt32(x));
                             trans.QueueCommand(r => ((IRedisNativeClient) r).SetEx(globalKey, _expiry, bytes));
 
                             //add key to globalKeys set for this namespace
                             trans.QueueCommand(r => r.AddItemToSet(_cacheNamespace.GetGlobalKeysKey(), globalKey));
+
+                            trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
+                                                             x => generationFromServer = Convert.ToInt32(x));
                             trans.Commit();
                         }
                         if (generationFromServer != GetGeneration())
@@ -242,7 +243,7 @@ namespace NHibernate.Caches.Redis
                 throw;
             }
        	}
-        /*
+        
         /// <summary>
         /// Puts a LockedCacheableItem corresponding to (value, version) into
         /// the cache
@@ -277,10 +278,11 @@ namespace NHibernate.Caches.Redis
                     long generationFromServer = -1;
 
                     pipe = client.CreatePipeline();
-                    pipe.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
-                                       x => generationFromServer = Convert.ToInt32(x));
+
                     pipe.QueueCommand(r => ((RedisNativeClient)r).Get(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey)),
                                        x => maybeObj = x);
+                    pipe.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
+                                        x => generationFromServer = Convert.ToInt32(x));
                     pipe.Flush();
 
                     //make sure generation is correct before analyzing cache item
@@ -292,21 +294,23 @@ namespace NHibernate.Caches.Redis
                     }
 
                     // check if can we can put this new (value, version) into the cache
-                    LockableCachedItem item = generateNewCachedItem(maybeObj, value, version, versionComparator, client);
+                    LockableCachedItem item = GenerateNewCachedItem(maybeObj, value, version, versionComparator, client);
                     if (item == null)
                         return;
                     _bytesToCache = client.Serialize(item);
 
                     // put new item in cache
                     trans = client.CreateTransaction();
-                    trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
-                                       x => generationFromServer = Convert.ToInt32(x));
+
                     trans.QueueCommand(r => ((IRedisNativeClient) r).SetEx(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey),
                                                         _expiry, NewCachedItemBytes()));
 
                     //add key to globalKeys set for this namespace
                     trans.QueueCommand(r => r.AddItemToSet(_cacheNamespace.GetGlobalKeysKey(), 
                         _cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey)));
+
+                    trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
+                                                 x => generationFromServer = Convert.ToInt32(x));
                     bool success = trans.Commit(); ;
                     while (!success)
                     {
@@ -323,7 +327,7 @@ namespace NHibernate.Caches.Redis
                             pipe.Replay();
                         }
 
-                        item = generateNewCachedItem(maybeObj, value, version, versionComparator, client);
+                        item = GenerateNewCachedItem(maybeObj, value, version, versionComparator, client);
                         if (item == null)
                             return;
                         _bytesToCache = client.Serialize(item);
@@ -363,7 +367,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="versionComparator"></param>
         /// <param name="client"></param>
         /// <returns></returns>
-        private LockableCachedItem generateNewCachedItem(byte[] maybeObj, object value, object version, IComparer versionComparator, CustomRedisClient client)
+        private static LockableCachedItem GenerateNewCachedItem(byte[] maybeObj, object value, object version, IComparer versionComparator, CustomRedisClient client)
         {
             LockableCachedItem newItem = null;
             object currentObject = maybeObj == null ? null : client.Deserialize(maybeObj);
@@ -381,7 +385,7 @@ namespace NHibernate.Caches.Redis
             return newItem;
             
         }
-         */
+         
 
         /// <summary>
         /// Remove item corresponding to key from cache
@@ -534,6 +538,7 @@ namespace NHibernate.Caches.Redis
                 var globalKeys = new List<string>();
                 //generate global keys
                 int keyCount = 0;
+                // Note: should get generation
                 foreach (var key in keys)
                 {
                     keyCount++;
