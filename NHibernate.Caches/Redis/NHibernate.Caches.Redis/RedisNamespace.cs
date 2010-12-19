@@ -85,6 +85,11 @@ namespace NHibernate.Caches.Redis
             return _globalKeysKey;
         }
 
+        public string GlobalCacheKey(object key)
+        {
+            return GlobalKey(key, NumTagsForKey);
+        }
+
         public string GlobalKey(object key, int numUniquePrefixes)
         {
             var rc = Sanitize(key);
