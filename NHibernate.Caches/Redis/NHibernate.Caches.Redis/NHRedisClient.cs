@@ -284,13 +284,11 @@ namespace NHibernate.Caches.Redis
                 {
                     CustomRedisClient client = disposable.Client;
 
-                    //watch for changes to generation key and cache key
-                    client.Watch(WatchKeys(key));
-
                     long generationFromServer = -1;
 
                     pipe = client.CreatePipeline();
 
+                    //watch for changes to generation key and cache key
                     pipe.QueueCommand(r => ((RedisClient)r).Watch(WatchKeys(key)) );
 
                     pipe.QueueCommand(r => ((RedisNativeClient)r).Get(_cacheNamespace.GlobalCacheKey(key)),
