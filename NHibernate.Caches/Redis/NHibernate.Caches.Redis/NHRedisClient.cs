@@ -50,8 +50,7 @@ namespace NHibernate.Caches.Redis
         // manage cache _region        
         private readonly RedisNamespace _cacheNamespace;
 
-        private byte[] _bytesToCache;
-
+    
    		static NhRedisClient()
 		{
 			Log = LoggerProvider.LoggerFor(typeof (RedisClient));
@@ -246,10 +245,6 @@ namespace NHibernate.Caches.Redis
             }
        	}
 
-        private byte[] NewCachedItemBytes()
-        {
-            return _bytesToCache;
-        }
 
         private string[] WatchKeys(object key)
         {
@@ -286,6 +281,8 @@ namespace NHibernate.Caches.Redis
 
                     long generationFromServer = -1;
 
+                    byte[] bytesToCache = null;
+
                     pipe = client.CreatePipeline();
 
                     //watch for changes to generation key and cache key
@@ -310,13 +307,13 @@ namespace NHibernate.Caches.Redis
                     LockableCachedItem item = GenerateNewCachedItem(maybeObj, value, version, versionComparator, client);
                     if (item == null)
                         return;
-                    _bytesToCache = client.Serialize(item);
+                    bytesToCache = client.Serialize(item);
 
                     // put new item in cache
                     trans = client.CreateTransaction();
 
                     trans.QueueCommand(r => ((IRedisNativeClient) r).SetEx(_cacheNamespace.GlobalCacheKey(key),
-                                                 _expiry, NewCachedItemBytes()));
+                                                 _expiry, bytesToCache));
 
                     //add key to globalKeys set for this namespace
                     trans.QueueCommand(r => r.AddItemToSet(_cacheNamespace.GetGlobalKeysKey(), 
@@ -341,7 +338,7 @@ namespace NHibernate.Caches.Redis
                         item = GenerateNewCachedItem(maybeObj, value, version, versionComparator, client);
                         if (item == null)
                             return;
-                        _bytesToCache = client.Serialize(item);
+                        bytesToCache = client.Serialize(item);
                          success = trans.Replay();
                     }
 

@@ -24,6 +24,9 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NHibernate.ByteCode.LinFu", "..\..\nhibernateTR\nhibernate\src\NHibernate.ByteCode.LinFu\NHibernate.ByteCode.LinFu.csproj", "{8289D6AD-9714-42D3-A94D-D4D9814D1281}"
 EndProject
 Global
+	GlobalSection(TestCaseManagementSettings) = postSolution
+		CategoryFile = NHibernate.vsmdi
+	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		MonoTouch|Any CPU = MonoTouch|Any CPU
