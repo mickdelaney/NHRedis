@@ -597,6 +597,26 @@ namespace NHibernate.Caches.Redis
             }
             return rc == 1;
         }
+ 
+        public bool SAdd(object key, IList values)
+        {
+            bool success = true;
+            using (var disposable = new DisposableClient(_clientManager))
+            {
+                CustomRedisClient client = disposable.Client;
+                using (var pipe = client.CreatePipeline())
+                {
+                    foreach (var value in values)
+                    {
+                        byte[] bytes = client.Serialize(value);
+                        pipe.QueueCommand(r => ((RedisNativeClient)r).SAdd(_cacheNamespace.GlobalCacheKey(key), bytes), x => success &= x == 1  );
+                    }
+                    success = true;
+                    pipe.Flush();
+                }
+            }
+            return success;
+        }
 
         public bool SRemove(object key, object value)
         {

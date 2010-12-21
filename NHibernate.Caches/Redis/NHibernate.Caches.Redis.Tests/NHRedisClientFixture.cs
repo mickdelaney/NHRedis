@@ -147,16 +147,29 @@ namespace NHibernate.Caches.Redis.Tests
             }
 
         }
-        /*
+        
         [Test]
         public void TestSAdd()
         {
+            var key = "key";
             var cache = _provider.BuildCache(typeof(String).FullName, new Dictionary<string, string>());
             Assert.IsFalse(cache.SRemove("key", "value"));
-            cache.SAdd("key", "value");
+            Assert.IsTrue(cache.SAdd("key", "value"));
             Assert.IsTrue(cache.SRemove("key","value"));
-            Assert.IsFalse(cache.SRemove("key", "value"));
         }
+
+        [Test]
+        public void TestSAddMultiple()
+        {
+            var cache = _provider.BuildCache(typeof(String).FullName, new Dictionary<string, string>());
+            var vals = new string[]{"value1", "value2"};
+            Assert.IsFalse(cache.SRemove("key", vals[0]));
+            Assert.IsFalse(cache.SRemove("key", vals[1]));
+            bool rc = cache.SAdd("key", vals);
+            Assert.IsTrue(cache.SRemove("key", vals[0]));
+            Assert.IsTrue(cache.SRemove("key", vals[1]));
+        }
+
         
         [Test]
         public void TestSMembers()
@@ -257,7 +270,7 @@ namespace NHibernate.Caches.Redis.Tests
        
 
         }
-        */
+        
 		[Test]
 		public void TestPut()
 		{
