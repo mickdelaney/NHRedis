@@ -32,19 +32,10 @@ namespace NHibernate.Caches.Redis
            Del(lockKey);           
         }
 
-        public int FetchGeneration(string generationKey)
+        public long FetchGeneration(string generationKey)
         {
-            int rc = 0;
-            string val = GetValue(generationKey);
-            if (val == null)
-            {
-                Set<int>(generationKey, 0);
-            }
-            else
-            {
-                rc = Convert.ToInt32(val);
-            }
-            return rc;
+            var val = GetValue(generationKey);
+            return (val == null) ? Incr(generationKey) : Convert.ToInt64(val);
         }
 
         // Serialize object to buffer

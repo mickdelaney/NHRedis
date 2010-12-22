@@ -163,7 +163,7 @@ namespace NHibernate.Caches.Redis
                         else
                             break;
                     }
-                    rc = maybeObj == null ? null : client.Deserialize(maybeObj);
+                    rc = (maybeObj == null) ? null : client.Deserialize(maybeObj);
                 }
 
             }
@@ -223,7 +223,6 @@ namespace NHibernate.Caches.Redis
                             break;
                     }
                 }
-
             }
             catch (Exception)
             {
@@ -231,7 +230,6 @@ namespace NHibernate.Caches.Redis
                 throw;
             }
        	}
-
 
         private string[] WatchKeys(object key)
         {
@@ -286,10 +284,9 @@ namespace NHibernate.Caches.Redis
                     }
 
                     // check if can we can put this new (value, version) into the cache
-                    var item = GenerateNewCachedItem(maybeObj, value, version, versionComparator, client);
-                    if (item == null)
+                    var bytesToCache = client.Serialize( GenerateNewCachedItem(maybeObj, value, version, versionComparator, client));
+                    if (bytesToCache == null)
                         return;
-                    var bytesToCache = client.Serialize(item);
 
                     // put new item in cache
                     trans = client.CreateTransaction();
@@ -303,7 +300,7 @@ namespace NHibernate.Caches.Redis
 
                     trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
                                                  x => generationFromServer = Convert.ToInt32(x));
-                    bool success = trans.Commit(); ;
+                    var success = trans.Commit(); ;
                     while (!success)
                     {
                         pipe.Replay();
@@ -317,10 +314,11 @@ namespace NHibernate.Caches.Redis
                             pipe.Replay();
                         }
 
-                        item = GenerateNewCachedItem(maybeObj, value, version, versionComparator, client);
-                        if (item == null)
+                        // check if can we can put this new (value, version) into the cache
+                        bytesToCache = client.Serialize( GenerateNewCachedItem(maybeObj, value, version, versionComparator, client) );
+                        if (bytesToCache == null)
                             return;
-                        bytesToCache = client.Serialize(item);
+
                          success = trans.Replay();
                     }
 
@@ -342,8 +340,6 @@ namespace NHibernate.Caches.Redis
                     trans.Dispose();
             }
         }
-
-      
 
         /// <summary>
         /// New cache item. Null return indicates that we are not allowed to update the cache, due to versioning
@@ -372,7 +368,6 @@ namespace NHibernate.Caches.Redis
                 newItem = currentLockableCachedItem;
             }
             return newItem;
-            
         }
          
 
@@ -398,7 +393,6 @@ namespace NHibernate.Caches.Redis
             {
                 Log.WarnFormat("could not delete key: {0}", key);
                 throw;
-
             }           
 		}
  
@@ -629,9 +623,9 @@ namespace NHibernate.Caches.Redis
         /// hit server for cache _region generation
         /// </summary>
         /// <returns></returns>
-        private int FetchGeneration()
+        private long FetchGeneration()
         {
-            int rc;
+            long rc;
             using (var disposable = new DisposableClient(_clientManager))
             {
                 rc = disposable.Client.FetchGeneration(_cacheNamespace.GetGenerationKey());
