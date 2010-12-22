@@ -148,7 +148,7 @@ namespace NHibernate.Caches.Redis
                     //if it succeeds, and null is returned, then either the key doesn't exist or
                     // our generation is out of date. In the latter case , update generation and try
                     // again.
-                    var generationFromServer = GetGeneration();
+                    var generationFromServer = _cacheNamespace.GetGeneration();
                     while (true)
                     {
                         using (var trans = ((RedisClient) client).CreateTransaction())
@@ -159,7 +159,7 @@ namespace NHibernate.Caches.Redis
                                                x => generationFromServer = Convert.ToInt32(x));
                             trans.Commit();
                         }
-                        if (generationFromServer != GetGeneration())
+                        if (generationFromServer != _cacheNamespace.GetGeneration())
                         {
                             //update cached generation value, and try again
                             _cacheNamespace.SetGeneration(generationFromServer);
@@ -212,7 +212,7 @@ namespace NHibernate.Caches.Redis
                     //if it succeeds, and null is returned, then either the key doesn't exist or
                     // our generation is out of date. In the latter case , update generation and try
                     // again.
-                    var generationFromServer = GetGeneration();
+                    var generationFromServer = -1;
                     while (true)
                     {
                         using (var trans = client.CreateTransaction())
@@ -227,7 +227,7 @@ namespace NHibernate.Caches.Redis
                                                              x => generationFromServer = Convert.ToInt32(x));
                             trans.Commit();
                         }
-                        if (generationFromServer != GetGeneration())
+                        if (generationFromServer != _cacheNamespace.GetGeneration())
                         {
                             //update cached generation value, and try again
                             _cacheNamespace.SetGeneration(generationFromServer);
@@ -295,7 +295,7 @@ namespace NHibernate.Caches.Redis
                     pipe.Flush();
 
                     //make sure generation is correct before analyzing cache item
-                    while (generationFromServer != GetGeneration())
+                    while (generationFromServer != _cacheNamespace.GetGeneration())
                     {
                         //update cached generation value, and try again
                         _cacheNamespace.SetGeneration(generationFromServer);
@@ -327,7 +327,7 @@ namespace NHibernate.Caches.Redis
                         pipe.Replay();
 
                         //make sure generation is correct before analyzing cache item
-                        while (generationFromServer != GetGeneration())
+                        while (generationFromServer != _cacheNamespace.GetGeneration())
                         {
                             //update cached generation value, and try again
                             _cacheNamespace.SetGeneration(generationFromServer);
@@ -434,7 +434,7 @@ namespace NHibernate.Caches.Redis
                 {
                     trans.QueueCommand(
                         r => r.IncrementValue(_cacheNamespace.GetGenerationKey()), x =>  _cacheNamespace.SetGeneration(x) );
-                    var temp = "temp_" + _cacheNamespace.GetGlobalKeysKey() + "_" + GetGeneration();
+                    var temp = "temp_" + _cacheNamespace.GetGlobalKeysKey() + "_" + _cacheNamespace.GetGeneration();
                     trans.QueueCommand(r => ((RedisNativeClient) r).Rename(_cacheNamespace.GetGlobalKeysKey(), temp), null, e => Log.Debug(e) );
                     trans.QueueCommand(r => r.AddItemToList(RedisNamespace.NamespacesGarbageKey, temp));
                     trans.Commit();
@@ -645,17 +645,6 @@ namespace NHibernate.Caches.Redis
 			return result;
 		}
 
-
-
-        /// <summary>
-        /// return cache _region generation
-        /// </summary>
-        /// <returns></returns>
-        private long GetGeneration()
-        {
-            SynchGeneration();
-            return _cacheNamespace.GetGeneration();
-        }
  
         /// <summary>
         /// hit server for cache _region generation
