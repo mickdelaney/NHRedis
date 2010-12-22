@@ -570,7 +570,8 @@ namespace NHibernate.Caches.Redis
             }
             return rc;
         }
-        public IEnumerable SMembers(object key)
+
+        public IList SMembers(object key)
         {
             using (var disposable = new DisposableClient(_clientManager))
             {
@@ -595,7 +596,7 @@ namespace NHibernate.Caches.Redis
             return rc == 1;
         }
  
-        public bool SAdd(object key, IList values)
+        public bool SAdd(object key, IList keys)
         {
             bool success = true;
             using (var disposable = new DisposableClient(_clientManager))
@@ -603,9 +604,9 @@ namespace NHibernate.Caches.Redis
                 CustomRedisClient client = disposable.Client;
                 using (var pipe = client.CreatePipeline())
                 {
-                    foreach (var value in values)
+                    foreach (var k in keys)
                     {
-                        byte[] bytes = client.Serialize(value);
+                        byte[] bytes = client.Serialize(k);
                         pipe.QueueCommand(r => ((RedisNativeClient)r).SAdd(_cacheNamespace.GlobalCacheKey(key), bytes), x => success &= x == 1  );
                     }
                     success = true;
