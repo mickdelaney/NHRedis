@@ -49,7 +49,6 @@ namespace NHibernate.Caches.Redis
 
         // manage cache _region        
         private readonly RedisNamespace _cacheNamespace;
-
     
    		static NhRedisClient()
 		{
@@ -129,21 +128,18 @@ namespace NHibernate.Caches.Redis
 		public object Get(object key)
 		{
 			if (key == null)
-			{
 				return null;
-			}
 			if (Log.IsDebugEnabled)
-			{
 				Log.DebugFormat("fetching object {0} from the cache", key);
-			}
+
             byte[] maybeObj = null;
-		    object rc = null;
+		    object rc;
 
             try
             {
                 using (var disposable = new DisposableClient(_clientManager))
                 {
-                    CustomRedisClient client = disposable.Client;
+                    var client = disposable.Client;
                     //do transactioned get of generation and value
                     //if it succeeds, and null is returned, then either the key doesn't exist or
                     // our generation is out of date. In the latter case , update generation and try
@@ -151,7 +147,7 @@ namespace NHibernate.Caches.Redis
                     var generationFromServer = _cacheNamespace.GetGeneration();
                     while (true)
                     {
-                        using (var trans = ((RedisClient) client).CreateTransaction())
+                        using (var trans = client.CreateTransaction())
                         {
                             trans.QueueCommand(r => ((RedisNativeClient) r).Get(_cacheNamespace.GlobalCacheKey(key)),
                                                x => maybeObj = x);
@@ -187,26 +183,17 @@ namespace NHibernate.Caches.Redis
         public void Put(object key, object value)
 		{
 			if (key == null)
-			{
 				throw new ArgumentNullException("key", "null key not allowed");
-			}
 			if (value == null)
-			{
 				throw new ArgumentNullException("value", "null value not allowed");
-			}
-
 			if (Log.IsDebugEnabled)
-			{
 				Log.DebugFormat("setting value for item {0}", key);
-			}
 
             try
-
-
             {
                 using (var disposable = new DisposableClient(_clientManager))
                 {
-                    CustomRedisClient client = disposable.Client;
+                    var client = disposable.Client;
                     var bytes = client.Serialize(value);
                     //do transactioned get of generation and value
                     //if it succeeds, and null is returned, then either the key doesn't exist or
@@ -263,13 +250,10 @@ namespace NHibernate.Caches.Redis
         public void Put(object key, object value, object version, IComparer versionComparator)
         {
             if (key == null)
-            {
                 return;
-            }
             if (Log.IsDebugEnabled)
-            {
                 Log.DebugFormat("fetching object {0} from the cache", key);
-            }
+ 
             byte[] maybeObj = null;
             IRedisPipeline pipe = null;
             IRedisTransaction trans = null;
@@ -277,11 +261,9 @@ namespace NHibernate.Caches.Redis
             {
                 using (var disposable = new DisposableClient(_clientManager))
                 {
-                    CustomRedisClient client = disposable.Client;
+                    var client = disposable.Client;
 
                     long generationFromServer = -1;
-
-                    byte[] bytesToCache = null;
 
                     pipe = client.CreatePipeline();
 
@@ -304,10 +286,10 @@ namespace NHibernate.Caches.Redis
                     }
 
                     // check if can we can put this new (value, version) into the cache
-                    LockableCachedItem item = GenerateNewCachedItem(maybeObj, value, version, versionComparator, client);
+                    var item = GenerateNewCachedItem(maybeObj, value, version, versionComparator, client);
                     if (item == null)
                         return;
-                    bytesToCache = client.Serialize(item);
+                    var bytesToCache = client.Serialize(item);
 
                     // put new item in cache
                     trans = client.CreateTransaction();
@@ -375,11 +357,13 @@ namespace NHibernate.Caches.Redis
         private static LockableCachedItem GenerateNewCachedItem(byte[] maybeObj, object value, object version, IComparer versionComparator, CustomRedisClient client)
         {
             LockableCachedItem newItem = null;
-            object currentObject = maybeObj == null ? null : client.Deserialize(maybeObj);
+            var currentObject = client.Deserialize(maybeObj);
             var currentLockableCachedItem = currentObject as LockableCachedItem;
+
             // this should never happen....
             if (currentObject != null && currentLockableCachedItem == null)
                 throw new NHRedisException();
+
             if (currentLockableCachedItem == null)
                  newItem = new LockableCachedItem(value, version);
             else if (currentLockableCachedItem.IsPuttable(0, version, versionComparator) )
@@ -399,13 +383,10 @@ namespace NHibernate.Caches.Redis
         public void Remove(object key)
 		{
 			if (key == null)
-			{
 				throw new ArgumentNullException("key");
-			}
 			if (Log.IsDebugEnabled)
-			{
 				Log.DebugFormat("removing item {0}", key);
-			}
+
             try
             {
                 using (var disposable = new DisposableClient(_clientManager))
@@ -429,7 +410,7 @@ namespace NHibernate.Caches.Redis
             //rename set of keys, and Start expiring the keys
             using (var disposable = new DisposableClient(_clientManager))
             {
-                CustomRedisClient client = disposable.Client;
+                var client = disposable.Client;
                 using (var trans = client.CreateTransaction())
                 {
                     trans.QueueCommand(
@@ -474,7 +455,6 @@ namespace NHibernate.Caches.Redis
         /// <param name="key"></param>
 		public void Unlock(object key)
 		{
-            
             try
             {
                 using (var disposable = new DisposableClient(_clientManager))
@@ -487,7 +467,6 @@ namespace NHibernate.Caches.Redis
                 Log.WarnFormat("could not release lock for key: {0}", key);
                 throw;
             }
-             
 		}
    
         /// <summary>
@@ -542,7 +521,7 @@ namespace NHibernate.Caches.Redis
                 var client = disposable.Client;
                 var globalKeys = new List<string>();
                 //generate global keys
-                int keyCount = 0;
+                var keyCount = 0;
                 // Note: should get generation
                 foreach (var key in keys)
                 {
@@ -555,9 +534,9 @@ namespace NHibernate.Caches.Redis
                     throw new RedisException("Prefetch: number of results does not match number of keys");
 
                 //process results
-                IEnumerator iter = keys.GetEnumerator();   
+                var iter = keys.GetEnumerator();   
                 iter.MoveNext();
-                foreach (byte[] resultBytes in resultBytesArray)
+                foreach (var resultBytes in resultBytesArray)
                 {
                     if (resultBytes != null)
                     {
@@ -576,8 +555,8 @@ namespace NHibernate.Caches.Redis
             using (var disposable = new DisposableClient(_clientManager))
             {
                 var members = disposable.Client.SMembers(_cacheNamespace.GlobalCacheKey(key));
-                IList rc = new ArrayList();
-                foreach(byte[] item in members)
+                var rc = new ArrayList();
+                foreach(var item in members)
                 {
                     rc.Add(disposable.Client.Deserialize(item));
                 }
@@ -590,7 +569,7 @@ namespace NHibernate.Caches.Redis
             int rc = 0;
             using (var disposable = new DisposableClient(_clientManager))
             {
-                byte[] bytes = disposable.Client.Serialize(value);
+                var bytes = disposable.Client.Serialize(value);
                 rc = disposable.Client.SAdd(_cacheNamespace.GlobalCacheKey(key),bytes);
             }
             return rc == 1;
@@ -598,15 +577,15 @@ namespace NHibernate.Caches.Redis
  
         public bool SAdd(object key, IList keys)
         {
-            bool success = true;
+            var success = true;
             using (var disposable = new DisposableClient(_clientManager))
             {
-                CustomRedisClient client = disposable.Client;
+                var client = disposable.Client;
                 using (var pipe = client.CreatePipeline())
                 {
                     foreach (var k in keys)
                     {
-                        byte[] bytes = client.Serialize(k);
+                        var bytes = client.Serialize(k);
                         pipe.QueueCommand(r => ((RedisNativeClient)r).SAdd(_cacheNamespace.GlobalCacheKey(key), bytes), x => success &= x == 1  );
                     }
                     success = true;
@@ -618,10 +597,10 @@ namespace NHibernate.Caches.Redis
 
         public bool SRemove(object key, object value)
         {
-            int rc = 0;
+            int rc;
             using (var disposable = new DisposableClient(_clientManager))
             {
-                byte[] bytes = disposable.Client.Serialize(value);
+                var bytes = disposable.Client.Serialize(value);
                 rc = disposable.Client.SRem(_cacheNamespace.GlobalCacheKey(key), bytes);
             }
             return rc == 1;
@@ -652,7 +631,7 @@ namespace NHibernate.Caches.Redis
         /// <returns></returns>
         private int FetchGeneration()
         {
-            int rc = 0;
+            int rc;
             using (var disposable = new DisposableClient(_clientManager))
             {
                 rc = disposable.Client.FetchGeneration(_cacheNamespace.GetGenerationKey());

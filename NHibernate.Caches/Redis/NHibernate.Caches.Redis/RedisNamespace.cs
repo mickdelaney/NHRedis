@@ -77,17 +77,10 @@ namespace NHibernate.Caches.Redis
         {
             using (LockingStrategy.WriteLock())
             {
-                _namespaceGeneration = generation;
+                if (_namespaceGeneration == -1 || generation > _namespaceGeneration)
+                     _namespaceGeneration = generation;
             }
         }
-        public void IncrementGeneration()
-        {
-            using (LockingStrategy.WriteLock())
-            {
-                _namespaceGeneration++;
-            }
-        }
-
         public string GetGenerationKey()
         {
             return _namespaceGenerationKey;
