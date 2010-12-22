@@ -120,24 +120,14 @@ namespace NHibernate.Caches.Redis
                 using (var disposable = new DisposableClient(_clientManager))
                 {
                     var client = disposable.Client;
-                    var bytes = client.Serialize(value);
-                    
-                    using (var pipe = client.CreatePipeline())
-                    {
-                        var globalKey = _cacheNamespace.GlobalCacheKey(key);
+                    var globalKey = _cacheNamespace.GlobalCacheKey(key);
 
-                        pipe.QueueCommand(r => ((IRedisNativeClient)r).SetEx(globalKey, _expiry, bytes));
-
-                        //add key to globalKeys set for this namespace
-                        pipe.QueueCommand(r => r.AddItemToSet(_cacheNamespace.GetGlobalKeysKey(), globalKey));
-
-                        pipe.Flush();
-                    }
+                    ((IRedisNativeClient)client).SetEx(globalKey, _expiry, client.Serialize(value));
                 }
             }
             catch (Exception)
             {
-                Log.WarnFormat("could not get: {0}", key);
+                Log.WarnFormat("could not put {0} for key {1}", value, key);
                 throw;
             }
         }
@@ -193,10 +183,6 @@ namespace NHibernate.Caches.Redis
 
                     trans.QueueCommand(r => ((IRedisNativeClient)r).SetEx(_cacheNamespace.GlobalCacheKey(key),
                                                  _expiry, bytesToCache));
-
-                    //add key to globalKeys set for this namespace
-                    trans.QueueCommand(r => r.AddItemToSet(_cacheNamespace.GetGlobalKeysKey(),
-                                                 _cacheNamespace.GlobalCacheKey(key)));
 
                     var success = trans.Commit(); ;
                     while (!success)
