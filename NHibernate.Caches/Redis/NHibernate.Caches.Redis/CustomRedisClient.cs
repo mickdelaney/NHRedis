@@ -8,7 +8,7 @@ namespace NHibernate.Caches.Redis
 {
     public class CustomRedisClient : RedisClient
     {
-        private MemoryStream _memoryStream = new MemoryStream(1024);
+        private MemoryStream _memoryStream = new MemoryStream();
         private BinaryFormatter _bf = new BinaryFormatter();
 
         public CustomRedisClient(string host, int port)

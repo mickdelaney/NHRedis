@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-
+using NHibernate.Caches.Redis.Locking;
 
 
 namespace NHibernate.Caches.Redis
@@ -58,21 +58,34 @@ namespace NHibernate.Caches.Redis
             //get generation
             _namespaceGenerationKey = _namespaceReservedName + "_" + "generation";
 
+            LockingStrategy = new ReaderWriterLockingStrategy();
         }
 
-
+        public ILockingStrategy LockingStrategy
+        {
+            get; set;
+        }
 
         public long GetGeneration()
         {
-            return _namespaceGeneration;
+            using (LockingStrategy.ReadLock())
+            {
+                return _namespaceGeneration;
+            }
         }
         public void SetGeneration(long generation)
         {
-             _namespaceGeneration = generation;
+            using (LockingStrategy.WriteLock())
+            {
+                _namespaceGeneration = generation;
+            }
         }
         public void IncrementGeneration()
         {
-            _namespaceGeneration++;
+            using (LockingStrategy.WriteLock())
+            {
+                _namespaceGeneration++;
+            }
         }
 
         public string GetGenerationKey()
@@ -94,7 +107,7 @@ namespace NHibernate.Caches.Redis
         {
             var rc = Sanitize(key);
             if (_namespacePrefix != null && !_namespacePrefix.Equals(""))
-                rc = _namespacePrefix + "_" + _namespaceGeneration.ToString() + NamespaceKeySeparator + rc;
+                rc = _namespacePrefix + "_" + GetGeneration().ToString() + NamespaceKeySeparator + rc;
             for (int i = 0; i < numUniquePrefixes; ++i)
                 rc += KeyTag;
             return rc;

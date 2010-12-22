@@ -39,6 +39,10 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\Lib\net\3.5\ServiceStack.Interfaces.dll</HintPath>
     </Reference>
+    <Reference Include="ServiceStack.Text, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\..\ServiceStack.Redis\lib\ServiceStack.Text.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.configuration" />
     <Reference Include="System.Core">
@@ -50,9 +54,15 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Locking\ReaderWriterLockingStrategy.cs" />
+    <Compile Include="NHRedisClientNoClear.cs" />
     <Compile Include="CustomRedisClient.cs" />
     <Compile Include="CustomRedisClientFactory.cs" />
     <Compile Include="DisposableClient.cs" />
+    <Compile Include="Locking\ILockingStrategy.cs" />
+    <Compile Include="Locking\NoLockingStrategy.cs" />
+    <Compile Include="Locking\ReadLock.cs" />
+    <Compile Include="Locking\WriteLock.cs" />
     <Compile Include="NHRedisClient.cs" />
     <Compile Include="NHRedisException.cs" />
     <Compile Include="RedisConfig.cs" />
