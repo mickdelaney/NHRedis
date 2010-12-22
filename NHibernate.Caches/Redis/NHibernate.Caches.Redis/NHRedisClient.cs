@@ -40,19 +40,19 @@ namespace NHibernate.Caches.Redis
 	public class NhRedisClient : ICache
 	{
 		private static readonly IInternalLogger Log;
-        private readonly PooledRedisClientManager _clientManager;
-		private readonly int _expiry;
+        protected readonly PooledRedisClientManager _clientManager;
+        protected readonly int _expiry;
 
         // NHibernate settings for cache _region and prefix
-		private readonly string _region;
-		private readonly string _regionPrefix;
+        protected readonly string _region;
+        protected readonly string _regionPrefix;
 
         // manage cache _region        
-        private readonly RedisNamespace _cacheNamespace;
-    
+        protected readonly RedisNamespace _cacheNamespace;
+
    		static NhRedisClient()
 		{
-			Log = LoggerProvider.LoggerFor(typeof (RedisClient));
+            Log = LoggerProvider.LoggerFor(typeof(NhRedisClient));
  		}
 
 		public NhRedisClient()
@@ -125,7 +125,7 @@ namespace NHibernate.Caches.Redis
         /// </summary>
         /// <param name="key"></param>
         /// <returns></returns>
-		public object Get(object key)
+		public virtual object Get(object key)
 		{
 			if (key == null)
 				return null;
@@ -152,7 +152,7 @@ namespace NHibernate.Caches.Redis
                             trans.QueueCommand(r => ((RedisNativeClient) r).Get(_cacheNamespace.GlobalCacheKey(key)),
                                                x => maybeObj = x);
                             trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
-                                               x => generationFromServer = Convert.ToInt32(x));
+                                               x => generationFromServer = Convert.ToInt64(x));
                             trans.Commit();
                         }
                         if (generationFromServer != _cacheNamespace.GetGeneration())
@@ -180,7 +180,7 @@ namespace NHibernate.Caches.Redis
         /// </summary>
         /// <param name="key"></param>
         /// <param name="value"></param>
-        public void Put(object key, object value)
+        public virtual void Put(object key, object value)
 		{
 			if (key == null)
 				throw new ArgumentNullException("key", "null key not allowed");
@@ -199,7 +199,7 @@ namespace NHibernate.Caches.Redis
                     //if it succeeds, and null is returned, then either the key doesn't exist or
                     // our generation is out of date. In the latter case , update generation and try
                     // again.
-                    var generationFromServer = -1;
+                    long generationFromServer = -1;
                     while (true)
                     {
                         using (var trans = client.CreateTransaction())
@@ -211,7 +211,7 @@ namespace NHibernate.Caches.Redis
                             trans.QueueCommand(r => r.AddItemToSet(_cacheNamespace.GetGlobalKeysKey(), globalKey));
 
                             trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
-                                                             x => generationFromServer = Convert.ToInt32(x));
+                                                             x => generationFromServer = Convert.ToInt64(x));
                             trans.Commit();
                         }
                         if (generationFromServer != _cacheNamespace.GetGeneration())
@@ -245,7 +245,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="value"></param>
         /// <param name="version"></param>
         /// <param name="versionComparator"></param>
-        public void Put(object key, object value, object version, IComparer versionComparator)
+        public virtual void Put(object key, object value, object version, IComparer versionComparator)
         {
             if (key == null)
                 return;
@@ -271,7 +271,7 @@ namespace NHibernate.Caches.Redis
                     pipe.QueueCommand(r => ((RedisNativeClient)r).Get(_cacheNamespace.GlobalCacheKey(key)),
                                        x => maybeObj = x);
                     pipe.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
-                                        x => generationFromServer = Convert.ToInt32(x));
+                                        x => generationFromServer = Convert.ToInt64(x));
                     pipe.Flush();
 
                     //make sure generation is correct before analyzing cache item
@@ -299,7 +299,7 @@ namespace NHibernate.Caches.Redis
                                                  _cacheNamespace.GlobalCacheKey(key)));
 
                     trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
-                                                 x => generationFromServer = Convert.ToInt32(x));
+                                                 x => generationFromServer = Convert.ToInt64(x));
                     var success = trans.Commit(); ;
                     while (!success)
                     {
@@ -399,7 +399,7 @@ namespace NHibernate.Caches.Redis
         /// <summary>
         /// clear cache region
         /// </summary>
-		public void Clear()
+		public virtual void Clear()
 		{
             //rename set of keys, and Start expiring the keys
             using (var disposable = new DisposableClient(_clientManager))

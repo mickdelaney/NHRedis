@@ -43,7 +43,8 @@ namespace NHibernate.Caches.Redis.Tests
 		public void FixtureSetup()
 		{
 			XmlConfigurator.Configure();
-			_props = new Dictionary<string, string> {{"compression_enabled", "false"}, {"expiration", "20"}};
+			_props = new Dictionary<string, string> {{RedisProvider.NoClearPropertyKey, "false"}, 
+                                                     {RedisProvider.ExpirationPropertyKey, "20"}};
 			_provider = new RedisProvider();
 			_provider.Start(_props);
 		}

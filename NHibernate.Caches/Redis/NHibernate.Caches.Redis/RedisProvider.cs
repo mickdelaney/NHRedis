@@ -45,6 +45,9 @@ namespace NHibernate.Caches.Redis
 
         private static readonly RedisGarbageCollector GarbageCollector;
 
+        public static string ExpirationPropertyKey = "expiration";
+        public static string NoClearPropertyKey = "no_clear_on_client";
+
 		static RedisProvider()
 		{
 			Log = LoggerProvider.LoggerFor(typeof (RedisProvider));
@@ -84,8 +87,12 @@ namespace NHibernate.Caches.Redis
 				Log.Debug("building cache with region: " + regionName + ", properties: " + sb);
 			}
 
+		    bool noClearClient = false;
+            if (properties.ContainsKey(NoClearPropertyKey))
+                noClearClient = properties[NoClearPropertyKey] == "true";
 
-            return new NhRedisClient(regionName, properties, _clientManager);
+            return noClearClient ? new NhRedisClientNoClear(regionName, properties, _clientManager) :
+                                                        new NhRedisClient(regionName, properties, _clientManager);
 		}
 
 		public long NextTimestamp()
