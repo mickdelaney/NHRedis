@@ -50,6 +50,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="NHRedisClientNoClearFixture.cs" />
     <Compile Include="NHRedisClientFixture.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RedisProviderFixture.cs" />
