@@ -232,15 +232,15 @@ namespace NHibernate.Caches.Redis
             }
        	}
 
-        protected string[] GlobalKeys(IEnumerable<VersionedPutParameters> putParameters, bool includeGenerationKey)
+        protected string[] GlobalKeys(IEnumerable<ScratchCacheItem> scratchItems, bool includeGenerationKey)
         {
             var nonNull = new List<string>();
             if (includeGenerationKey)
                 nonNull.Add(_cacheNamespace.GetGenerationKey());
-            foreach( var parameter in putParameters)
+            foreach( var item in scratchItems)
             {
-                if (parameter.Key != null)
-                    nonNull.Add(_cacheNamespace.GlobalCacheKey(parameter.Key));
+                if (item.PutParameters.Key != null)
+                    nonNull.Add(_cacheNamespace.GlobalCacheKey(item.PutParameters.Key));
             }
             return nonNull.ToArray();
         }
@@ -255,21 +255,17 @@ namespace NHibernate.Caches.Redis
         public virtual void Put(List<VersionedPutParameters> putParameters)
         {
             //deal with null keys
-            var copyOfParameters = new VersionedPutParameters[putParameters.Count];
-            putParameters.CopyTo(copyOfParameters);
-            foreach (var putParam in copyOfParameters)
+            IList<ScratchCacheItem> scratchItems = new List<ScratchCacheItem>();
+            foreach (var putParams in putParameters)
             {
-                if (putParam.Key == null)
-                   putParameters.Remove(putParam);
+                if (putParams.Key == null) continue;
+                scratchItems.Add(new ScratchCacheItem(putParams));
+                if (Log.IsDebugEnabled)
+                    Log.DebugFormat("fetching object {0} from the cache", putParams.Key.ToString());
             }
-            if (putParameters.Count == 0)
-                return;
+            if (scratchItems.Count == 0)  return;
 
-
-            if (Log.IsDebugEnabled)
-                Log.DebugFormat("fetching object {0} from the cache", keys.ToString());
- 
-            byte[][] maybeObjects = null;
+            byte[][] currentItemsRaw = null;
             IRedisPipeline pipe = null;
             IRedisTransaction trans = null;
             try
@@ -283,13 +279,12 @@ namespace NHibernate.Caches.Redis
                     pipe = client.CreatePipeline();
 
                     //watch for changes to generation key and cache key
-                    pipe.QueueCommand(r => ((RedisClient)r).Watch(GlobalKeys(putParameters,true )) );
+                    pipe.QueueCommand(r => ((RedisClient)r).Watch(GlobalKeys(scratchItems, true)));
 
                     //get all of the current objects
-                    pipe.QueueCommand(r => ((RedisNativeClient)r).MGet(GlobalKeys(putParameters, false)), x => maybeObjects = x);
+                    pipe.QueueCommand(r => ((RedisNativeClient)r).MGet(GlobalKeys(scratchItems, false)), x => currentItemsRaw = x);
 
-                    pipe.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
-                                        x => generationFromServer = Convert.ToInt64(x));
+                    pipe.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()), x => generationFromServer = Convert.ToInt64(x));
                     pipe.Flush();
 
                     //make sure generation is correct before analyzing cache item
@@ -301,22 +296,25 @@ namespace NHibernate.Caches.Redis
                         pipe.Replay();
                     }
 
-                    // check if can we can put this new (value, version) into the cache
-                    var bytesToCache = client.Serialize( GenerateNewCachedItem(client.Deserialize(maybeObjects), value, version, versionComparator));
-                    if (bytesToCache == null)
+                    // check if there is a new value to put
+                    scratchItems = GenerateNewCacheItems(currentItemsRaw, scratchItems, client);
+                    if (scratchItems.Count == 0)
                         return;
 
                     // put new item in cache
                     trans = client.CreateTransaction();
 
-                    //setex on all new objects
-                    trans.QueueCommand(r => ((IRedisNativeClient) r).SetEx(_cacheNamespace.GlobalCacheKey(key),
-                                                 _expiry, bytesToCache));
+                    foreach (var scratch in scratchItems)
+                    {
+                        //setex on all new objects
+                        trans.QueueCommand(r => ((IRedisNativeClient)r).SetEx(_cacheNamespace.GlobalCacheKey(scratch.PutParameters.Key),
+                                                     _expiry, scratch.NewCacheItemRaw));
 
-                    //add keys to globalKeys set for this namespace
-                    trans.QueueCommand(r => r.AddRangeToSet(_cacheNamespace.GetGlobalKeysKey(),
-                                               new List<string>((GlobalKeys(putParameters, false)))));
-
+                        //add keys to globalKeys set for this namespace
+                        trans.QueueCommand(r => r.AddItemToSet(_cacheNamespace.GetGlobalKeysKey(),
+                                                   _cacheNamespace.GlobalCacheKey(scratch.PutParameters.Key)));
+                    }
+         
                     trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
                                                  x => generationFromServer = Convert.ToInt64(x));
                     var success = trans.Commit(); ;
@@ -333,9 +331,9 @@ namespace NHibernate.Caches.Redis
                             pipe.Replay();
                         }
 
-                        // check if can we can put this new (value, version) into the cache
-                        bytesToCache = client.Serialize( GenerateNewCachedItem(client.Deserialize(maybeObj), value, version, versionComparator) );
-                        if (bytesToCache == null)
+                        // check if there is a new value to put
+                        scratchItems = GenerateNewCacheItems(currentItemsRaw, scratchItems, client);
+                        if (scratchItems.Count == 0)
                             return;
 
                          success = trans.Replay();
@@ -348,7 +346,11 @@ namespace NHibernate.Caches.Redis
             }
             catch (Exception)
             {
-                Log.WarnFormat("could not get: {0}", key);
+                foreach (var putParams in putParameters)
+                {
+                    Log.WarnFormat("could not get: {0}", putParams.Key);
+                }
+                
                 throw;
             }
             finally
@@ -360,32 +362,49 @@ namespace NHibernate.Caches.Redis
             }
         }
 
+    
         /// <summary>
         /// New cache item. Null return indicates that we are not allowed to update the cache, due to versioning
         /// </summary>
-        /// <param name="maybeObj"></param>
-        /// <param name="value"></param>
-        /// <param name="version"></param>
-        /// <param name="versionComparator"></param>
+        /// <param name="currentItemsRaw"></param>
+        /// <param name="scratchItems"></param>
         /// <param name="client"></param>
         /// <returns></returns>
-        private static LockableCachedItem GenerateNewCachedItem(object currentObject, object value, object version, IComparer versionComparator)
+        protected static IList<ScratchCacheItem> GenerateNewCacheItems(byte[][] currentItemsRaw, IList<ScratchCacheItem> scratchItems, CustomRedisClient client)
         {
-            LockableCachedItem newItem = null;
-            var currentLockableCachedItem = currentObject as LockableCachedItem;
-
-            // this should never happen....
-            if (currentObject != null && currentLockableCachedItem == null)
+            if (currentItemsRaw.Length != scratchItems.Count)
                 throw new NHRedisException();
 
-            if (currentLockableCachedItem == null)
-                 newItem = new LockableCachedItem(value, version);
-            else if (currentLockableCachedItem.IsPuttable(0, version, versionComparator) )
+            var puttableScratchItems = new List<ScratchCacheItem>();
+            for (int i = 0; i < currentItemsRaw.Length; ++i)
             {
-                currentLockableCachedItem.Update(value, version, versionComparator);
-                newItem = currentLockableCachedItem;
+                var scratch = scratchItems[i];
+                var currentObject = client.Deserialize(currentItemsRaw[i]);
+                scratch.CurrentCacheValue = currentObject;
+                var currentLockableCachedItem = currentObject as LockableCachedItem;
+
+                // this should never happen....
+                if (currentObject != null && currentLockableCachedItem == null)
+                    throw new NHRedisException();
+
+                var value = scratch.PutParameters.Value;
+                var version = scratch.PutParameters.Version;
+                var versionComparator = scratch.PutParameters.VersionComparer;
+
+                LockableCachedItem newItem = null;
+                if (currentLockableCachedItem == null)
+                    newItem = new LockableCachedItem(value, version);
+                else if (currentLockableCachedItem.IsPuttable(0, version, versionComparator))
+                {
+                    currentLockableCachedItem.Update(value, version, versionComparator);
+                    newItem = currentLockableCachedItem;
+                }
+                scratch.NewCacheItemRaw = client.Serialize(newItem);
+                if (scratch.NewCacheItemRaw != null)
+                    puttableScratchItems.Add(scratch);
+                
             }
-            return newItem;
+            return puttableScratchItems;
         }
          
 

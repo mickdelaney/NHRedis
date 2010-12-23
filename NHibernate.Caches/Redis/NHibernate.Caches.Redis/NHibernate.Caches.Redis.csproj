@@ -71,6 +71,7 @@
     <Compile Include="RedisProvider.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RedisSectionHandler.cs" />
+    <Compile Include="ScratchCacheItem.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\nhibernateTR\nhibernate\src\NHibernate\NHibernate.csproj">

@@ -132,32 +132,25 @@ namespace NHibernate.Caches.Redis
             }
         }
 
-        private string[] WatchKeys(object key)
-        {
-            return new[] { _cacheNamespace.GlobalCacheKey(key) };
-
-        }
-
         /// <summary>
         /// Puts a LockedCacheableItem corresponding to (value, version) into
         /// the cache
         /// </summary>
-        /// <param name="key"></param>
-        /// <param name="value"></param>
-        /// <param name="version"></param>
-        /// <param name="versionComparator"></param>
-        public override void Put(List<VersionedPutParameters> putParameters)
+        /// <param name="putParameters"></param>
+        public virtual void Put(List<VersionedPutParameters> putParameters)
         {
-            var key = putParameters.Key;
-            var value = putParameters.Value;
-            var version = putParameters.Version;
-            var versionComparator = putParameters.VersionComparer;
-            if (key == null)
-                return;
-            if (Log.IsDebugEnabled)
-                Log.DebugFormat("fetching object {0} from the cache", key);
+            //deal with null keys
+            IList<ScratchCacheItem> scratchItems = new List<ScratchCacheItem>();
+            foreach (var putParams in putParameters)
+            {
+                if (putParams.Key == null) continue;
+                scratchItems.Add(new ScratchCacheItem(putParams));
+                if (Log.IsDebugEnabled)
+                    Log.DebugFormat("fetching object {0} from the cache", putParams.Key.ToString());
+            }
+            if (scratchItems.Count == 0) return;
 
-            byte[] maybeObj = null;
+            byte[][] currentItemsRaw = null;
             IRedisPipeline pipe = null;
             IRedisTransaction trans = null;
             try
@@ -168,34 +161,37 @@ namespace NHibernate.Caches.Redis
 
                     pipe = client.CreatePipeline();
 
-                    //watch for changes to generation key and cache key
-                    pipe.QueueCommand(r => ((RedisClient)r).Watch(WatchKeys(key)));
+                    //watch for changes to cache keys
+                    pipe.QueueCommand(r => ((RedisClient)r).Watch(GlobalKeys(scratchItems, false)));
 
-                    pipe.QueueCommand(r => ((RedisNativeClient)r).Get(_cacheNamespace.GlobalCacheKey(key)),
-                                       x => maybeObj = x);
+                    //get all of the current objects
+                    pipe.QueueCommand(r => ((RedisNativeClient)r).MGet(GlobalKeys(scratchItems, false)), x => currentItemsRaw = x);
 
                     pipe.Flush();
 
-
-                    // check if can we can put this new (value, version) into the cache
-                    var bytesToCache = client.Serialize(GenerateNewCachedItem(maybeObj, value, version, versionComparator, client));
-                    if (bytesToCache == null)
+                    // check if there is are new cache items to put
+                    scratchItems = GenerateNewCacheItems(currentItemsRaw, scratchItems, client);
+                    if (scratchItems.Count == 0)
                         return;
 
                     // put new item in cache
                     trans = client.CreateTransaction();
 
-                    trans.QueueCommand(r => ((IRedisNativeClient)r).SetEx(_cacheNamespace.GlobalCacheKey(key),
-                                                 _expiry, bytesToCache));
+                    foreach (var scratch in scratchItems)
+                    {
+                        //setex on all new objects
+                        trans.QueueCommand(r => ((IRedisNativeClient)r).SetEx(_cacheNamespace.GlobalCacheKey(scratch.PutParameters.Key),
+                                                     _expiry, scratch.NewCacheItemRaw));
+                    }
 
                     var success = trans.Commit(); ;
                     while (!success)
                     {
                         pipe.Replay();
 
-                        // check if can we can put this new (value, version) into the cache
-                        bytesToCache = client.Serialize(GenerateNewCachedItem(maybeObj, value, version, versionComparator, client));
-                        if (bytesToCache == null)
+                        // check if there is a new value to put
+                        scratchItems = GenerateNewCacheItems(currentItemsRaw, scratchItems, client);
+                        if (scratchItems.Count == 0)
                             return;
 
                         success = trans.Replay();
@@ -204,7 +200,11 @@ namespace NHibernate.Caches.Redis
             }
             catch (Exception)
             {
-                Log.WarnFormat("could not get: {0}", key);
+                foreach (var putParams in putParameters)
+                {
+                    Log.WarnFormat("could not get: {0}", putParams.Key);
+                }
+
                 throw;
             }
             finally
@@ -216,34 +216,8 @@ namespace NHibernate.Caches.Redis
             }
         }
 
-        /// <summary>
-        /// New cache item. Null return indicates that we are not allowed to update the cache, due to versioning
-        /// </summary>
-        /// <param name="maybeObj"></param>
-        /// <param name="value"></param>
-        /// <param name="version"></param>
-        /// <param name="versionComparator"></param>
-        /// <param name="client"></param>
-        /// <returns></returns>
-        private static LockableCachedItem GenerateNewCachedItem(byte[] maybeObj, object value, object version, IComparer versionComparator, CustomRedisClient client)
-        {
-            LockableCachedItem newItem = null;
-            var currentObject = client.Deserialize(maybeObj);
-            var currentLockableCachedItem = currentObject as LockableCachedItem;
 
-            // this should never happen....
-            if (currentObject != null && currentLockableCachedItem == null)
-                throw new NHRedisException();
-
-            if (currentLockableCachedItem == null)
-                newItem = new LockableCachedItem(value, version);
-            else if (currentLockableCachedItem.IsPuttable(0, version, versionComparator))
-            {
-                currentLockableCachedItem.Update(value, version, versionComparator);
-                newItem = currentLockableCachedItem;
-            }
-            return newItem;
-        }
+    
 
         /// <summary>
         /// clear cache region
