@@ -146,8 +146,12 @@ namespace NHibernate.Caches.Redis
         /// <param name="value"></param>
         /// <param name="version"></param>
         /// <param name="versionComparator"></param>
-        public override void Put(object key, object value, object version, IComparer versionComparator)
+        public override void Put(VersionedPutParameters putParameters)
         {
+            var key = putParameters.Key;
+            var value = putParameters.Value;
+            var version = putParameters.Version;
+            var versionComparator = putParameters.VersionComparer;
             if (key == null)
                 return;
             if (Log.IsDebugEnabled)

@@ -36,8 +36,8 @@ namespace NHibernate.Caches.Redis.Tests
 {
 	public class NhRedisClientFixture
 	{
-		private Dictionary<string, string> _props;
-		private ICacheProvider _provider;
+		protected Dictionary<string, string> _props;
+		protected ICacheProvider _provider;
 
 		[TestFixtureSetUp]
 		public void FixtureSetup()
@@ -56,7 +56,7 @@ namespace NHibernate.Caches.Redis.Tests
 		}
 
 		[Test]
-		public void TestClear()
+		public virtual void TestClear()
 		{
 			var key = "key1";
 			var value = "value";
@@ -162,13 +162,15 @@ namespace NHibernate.Caches.Redis.Tests
         [Test]
         public void TestSAddMultiple()
         {
+            string key = "key";
             var cache = _provider.BuildCache(typeof(String).FullName, new Dictionary<string, string>());
+            cache.Remove(key);
             var vals = new string[]{"value1", "value2"};
-            Assert.IsFalse(cache.SRemove("key", vals[0]));
-            Assert.IsFalse(cache.SRemove("key", vals[1]));
-            bool rc = cache.SAdd("key", vals);
-            Assert.IsTrue(cache.SRemove("key", vals[0]));
-            Assert.IsTrue(cache.SRemove("key", vals[1]));
+            Assert.IsFalse(cache.SRemove(key, vals[0]));
+            Assert.IsFalse(cache.SRemove(key, vals[1]));
+            bool rc = cache.SAdd(key, vals);
+            Assert.IsTrue(cache.SRemove(key, vals[0]));
+            Assert.IsTrue(cache.SRemove(key, vals[1]));
         }
 
         
@@ -251,21 +253,33 @@ namespace NHibernate.Caches.Redis.Tests
             int version3 = 3;
             string value3 = "value3";
 
-            cache.Clear();
+            cache.Remove(key);
 
 
             //check if object is cached correctly
-            cache.Put(key, value1, version1, comparer);
-            LockableCachedItem obj = cache.Get(key) as LockableCachedItem;
+            VersionedPutParameters versionParams =
+	        new VersionedPutParameters()
+	            {
+	                Key = key,
+	                Value = value1,
+	                Version = version1,
+	                VersionComparer = comparer
+	            };
+            cache.Put(versionParams);
+            var obj = cache.Get(key) as LockableCachedItem;
             Assert.AreEqual(obj.Value, value1);
 
+	        versionParams.Value = value2;
+	        versionParams.Version = version2;
             // check that object changes with next version
-            cache.Put(key, value2, version2, comparer);
+            cache.Put(versionParams);
             obj = cache.Get(key) as LockableCachedItem;
             Assert.AreEqual(obj.Value, value2);
 
             // check that older version does not change cache
-            cache.Put(key, value3, version1, comparer);
+            versionParams.Value = value3;
+            versionParams.Version = version1;
+            cache.Put(versionParams);
             obj = cache.Get(key) as LockableCachedItem;
             Assert.AreEqual(obj.Value, value2);
        

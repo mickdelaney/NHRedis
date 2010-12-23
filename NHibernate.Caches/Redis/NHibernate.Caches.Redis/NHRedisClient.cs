@@ -231,9 +231,15 @@ namespace NHibernate.Caches.Redis
             }
        	}
 
-        private string[] WatchKeys(object key)
+        private string[] WatchKeys(IEnumerable<VersionedPutParameters> putParameters)
         {
-            return new[] { _cacheNamespace.GetGenerationKey(), _cacheNamespace.GlobalCacheKey(key) };
+            var nonNull = new List<string> {_cacheNamespace.GetGenerationKey()};
+            foreach( var parameter in putParameters)
+            {
+                if (parameter.Key != null)
+                    nonNull.Add(_cacheNamespace.GlobalCacheKey(parameter.Key));
+            }
+            return nonNull.ToArray();
  
         }
         
@@ -245,8 +251,12 @@ namespace NHibernate.Caches.Redis
         /// <param name="value"></param>
         /// <param name="version"></param>
         /// <param name="versionComparator"></param>
-        public virtual void Put(object key, object value, object version, IComparer versionComparator)
+        public virtual void Put(VersionedPutParameters putParameters)
         {
+            var key = putParameters.Key;
+            var value = putParameters.Value;
+            var version = putParameters.Version;
+            var versionComparator = putParameters.VersionComparer;
             if (key == null)
                 return;
             if (Log.IsDebugEnabled)
@@ -266,7 +276,7 @@ namespace NHibernate.Caches.Redis
                     pipe = client.CreatePipeline();
 
                     //watch for changes to generation key and cache key
-                    pipe.QueueCommand(r => ((RedisClient)r).Watch(WatchKeys(key)) );
+                    pipe.QueueCommand(r => ((RedisClient)r).Watch(WatchKeys(new[]{putParameters} )) );
 
                     pipe.QueueCommand(r => ((RedisNativeClient)r).Get(_cacheNamespace.GlobalCacheKey(key)),
                                        x => maybeObj = x);
@@ -284,7 +294,7 @@ namespace NHibernate.Caches.Redis
                     }
 
                     // check if can we can put this new (value, version) into the cache
-                    var bytesToCache = client.Serialize( GenerateNewCachedItem(maybeObj, value, version, versionComparator, client));
+                    var bytesToCache = client.Serialize( GenerateNewCachedItem(client.Deserialize(maybeObj), value, version, versionComparator));
                     if (bytesToCache == null)
                         return;
 
@@ -315,7 +325,7 @@ namespace NHibernate.Caches.Redis
                         }
 
                         // check if can we can put this new (value, version) into the cache
-                        bytesToCache = client.Serialize( GenerateNewCachedItem(maybeObj, value, version, versionComparator, client) );
+                        bytesToCache = client.Serialize( GenerateNewCachedItem(client.Deserialize(maybeObj), value, version, versionComparator) );
                         if (bytesToCache == null)
                             return;
 
@@ -350,10 +360,9 @@ namespace NHibernate.Caches.Redis
         /// <param name="versionComparator"></param>
         /// <param name="client"></param>
         /// <returns></returns>
-        private static LockableCachedItem GenerateNewCachedItem(byte[] maybeObj, object value, object version, IComparer versionComparator, CustomRedisClient client)
+        private static LockableCachedItem GenerateNewCachedItem(object currentObject, object value, object version, IComparer versionComparator)
         {
             LockableCachedItem newItem = null;
-            var currentObject = client.Deserialize(maybeObj);
             var currentLockableCachedItem = currentObject as LockableCachedItem;
 
             // this should never happen....
