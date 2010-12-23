@@ -257,7 +257,7 @@ namespace NHibernate.Caches.Redis.Tests
 
 
             //check if object is cached correctly
-            VersionedPutParameters versionParams =
+            var versionParams =
 	        new VersionedPutParameters()
 	            {
 	                Key = key,
@@ -265,21 +265,22 @@ namespace NHibernate.Caches.Redis.Tests
 	                Version = version1,
 	                VersionComparer = comparer
 	            };
-            cache.Put(versionParams);
+	        var list = new List<VersionedPutParameters> {versionParams};
+            cache.Put(list);
             var obj = cache.Get(key) as LockableCachedItem;
             Assert.AreEqual(obj.Value, value1);
 
 	        versionParams.Value = value2;
 	        versionParams.Version = version2;
             // check that object changes with next version
-            cache.Put(versionParams);
+            cache.Put(list);
             obj = cache.Get(key) as LockableCachedItem;
             Assert.AreEqual(obj.Value, value2);
 
             // check that older version does not change cache
             versionParams.Value = value3;
             versionParams.Version = version1;
-            cache.Put(versionParams);
+            cache.Put(list);
             obj = cache.Get(key) as LockableCachedItem;
             Assert.AreEqual(obj.Value, value2);
        

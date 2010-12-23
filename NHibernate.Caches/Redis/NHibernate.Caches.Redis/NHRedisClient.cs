@@ -30,6 +30,7 @@ using System.Collections.Generic;
 using ServiceStack.Redis;
 using NHibernate.Cache;
 using ServiceStack.Redis.Pipeline;
+using ServiceStack.Text;
 using Environment = NHibernate.Cfg.Environment;
 
 namespace NHibernate.Caches.Redis
@@ -231,38 +232,44 @@ namespace NHibernate.Caches.Redis
             }
        	}
 
-        private string[] WatchKeys(IEnumerable<VersionedPutParameters> putParameters)
+        protected string[] GlobalKeys(IEnumerable<VersionedPutParameters> putParameters, bool includeGenerationKey)
         {
-            var nonNull = new List<string> {_cacheNamespace.GetGenerationKey()};
+            var nonNull = new List<string>();
+            if (includeGenerationKey)
+                nonNull.Add(_cacheNamespace.GetGenerationKey());
             foreach( var parameter in putParameters)
             {
                 if (parameter.Key != null)
                     nonNull.Add(_cacheNamespace.GlobalCacheKey(parameter.Key));
             }
             return nonNull.ToArray();
- 
         }
-        
+
+      
+   
         /// <summary>
         /// Puts a LockedCacheableItem corresponding to (value, version) into
         /// the cache
         /// </summary>
-        /// <param name="key"></param>
-        /// <param name="value"></param>
-        /// <param name="version"></param>
-        /// <param name="versionComparator"></param>
-        public virtual void Put(VersionedPutParameters putParameters)
+        /// <param name="putParameters"></param>
+        public virtual void Put(List<VersionedPutParameters> putParameters)
         {
-            var key = putParameters.Key;
-            var value = putParameters.Value;
-            var version = putParameters.Version;
-            var versionComparator = putParameters.VersionComparer;
-            if (key == null)
+            //deal with null keys
+            var copyOfParameters = new VersionedPutParameters[putParameters.Count];
+            putParameters.CopyTo(copyOfParameters);
+            foreach (var putParam in copyOfParameters)
+            {
+                if (putParam.Key == null)
+                   putParameters.Remove(putParam);
+            }
+            if (putParameters.Count == 0)
                 return;
+
+
             if (Log.IsDebugEnabled)
-                Log.DebugFormat("fetching object {0} from the cache", key);
+                Log.DebugFormat("fetching object {0} from the cache", keys.ToString());
  
-            byte[] maybeObj = null;
+            byte[][] maybeObjects = null;
             IRedisPipeline pipe = null;
             IRedisTransaction trans = null;
             try
@@ -276,10 +283,11 @@ namespace NHibernate.Caches.Redis
                     pipe = client.CreatePipeline();
 
                     //watch for changes to generation key and cache key
-                    pipe.QueueCommand(r => ((RedisClient)r).Watch(WatchKeys(new[]{putParameters} )) );
+                    pipe.QueueCommand(r => ((RedisClient)r).Watch(GlobalKeys(putParameters,true )) );
 
-                    pipe.QueueCommand(r => ((RedisNativeClient)r).Get(_cacheNamespace.GlobalCacheKey(key)),
-                                       x => maybeObj = x);
+                    //get all of the current objects
+                    pipe.QueueCommand(r => ((RedisNativeClient)r).MGet(GlobalKeys(putParameters, false)), x => maybeObjects = x);
+
                     pipe.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
                                         x => generationFromServer = Convert.ToInt64(x));
                     pipe.Flush();
@@ -294,19 +302,20 @@ namespace NHibernate.Caches.Redis
                     }
 
                     // check if can we can put this new (value, version) into the cache
-                    var bytesToCache = client.Serialize( GenerateNewCachedItem(client.Deserialize(maybeObj), value, version, versionComparator));
+                    var bytesToCache = client.Serialize( GenerateNewCachedItem(client.Deserialize(maybeObjects), value, version, versionComparator));
                     if (bytesToCache == null)
                         return;
 
                     // put new item in cache
                     trans = client.CreateTransaction();
 
+                    //setex on all new objects
                     trans.QueueCommand(r => ((IRedisNativeClient) r).SetEx(_cacheNamespace.GlobalCacheKey(key),
                                                  _expiry, bytesToCache));
 
-                    //add key to globalKeys set for this namespace
-                    trans.QueueCommand(r => r.AddItemToSet(_cacheNamespace.GetGlobalKeysKey(), 
-                                                 _cacheNamespace.GlobalCacheKey(key)));
+                    //add keys to globalKeys set for this namespace
+                    trans.QueueCommand(r => r.AddRangeToSet(_cacheNamespace.GetGlobalKeysKey(),
+                                               new List<string>((GlobalKeys(putParameters, false)))));
 
                     trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
                                                  x => generationFromServer = Convert.ToInt64(x));

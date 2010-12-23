@@ -1,4 +1,5 @@
-﻿using ServiceStack.Redis;
+﻿using System.Collections.Generic;
+using ServiceStack.Redis;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Collections;
 using System.IO;
@@ -38,6 +39,19 @@ namespace NHibernate.Caches.Redis
             return (val == null) ? Incr(generationKey) : Convert.ToInt64(val);
         }
 
+        public List<byte[]> Serialize(object[] values)
+        {
+            var rc = new List<byte[]>();
+            foreach (var value in values)
+            {
+                var bytes = Serialize(value);
+                if (bytes != null)
+                    rc.Add(bytes);
+            }
+            return rc;
+        }
+
+
         // Serialize object to buffer
         public  byte[] Serialize(object value)
         {
@@ -48,6 +62,7 @@ namespace NHibernate.Caches.Redis
             _bf.Serialize(_memoryStream, dictEntry);
             return _memoryStream.GetBuffer();
         }
+
         // Deserialize buffer to object
         public  object Deserialize(byte[] someBytes)
         {         
@@ -58,6 +73,17 @@ namespace NHibernate.Caches.Redis
             _memoryStream.Seek(0, 0);
             var de = (DictionaryEntry)_bf.Deserialize(_memoryStream);
             return de.Value;
+        }
+        public IList Deserialize(byte[][] byteArray)
+        {
+            IList rc = new ArrayList();
+            foreach (var someBytes in byteArray)
+            {
+                var obj = Deserialize(someBytes);
+                if (obj != null)
+                    rc.Add(obj);
+            }
+            return rc;
         }
     }
 }
