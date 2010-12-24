@@ -75,6 +75,8 @@ namespace NHibernate.Caches.Redis
         }
         public void SetGeneration(long generation)
         {
+            if (generation < 0) return;
+
             using (LockingStrategy.WriteLock())
             {
                 if (_namespaceGeneration == -1 || generation > _namespaceGeneration)

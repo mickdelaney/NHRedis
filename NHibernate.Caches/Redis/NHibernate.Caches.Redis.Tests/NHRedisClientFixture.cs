@@ -153,7 +153,7 @@ namespace NHibernate.Caches.Redis.Tests
         public void TestSAdd()
         {
             var key = "key";
-            var cache = _provider.BuildCache(typeof(String).FullName, new Dictionary<string, string>());
+            var cache = _provider.BuildCache(typeof(String).FullName, _props);
             Assert.IsFalse(cache.SRemove("key", "value"));
             Assert.IsTrue(cache.SAdd("key", "value"));
             Assert.IsTrue(cache.SRemove("key","value"));
@@ -163,7 +163,7 @@ namespace NHibernate.Caches.Redis.Tests
         public void TestSAddMultiple()
         {
             string key = "key";
-            var cache = _provider.BuildCache(typeof(String).FullName, new Dictionary<string, string>());
+            var cache = _provider.BuildCache(typeof(String).FullName, _props);
             cache.Remove(key);
             var vals = new string[]{"value1", "value2"};
             Assert.IsFalse(cache.SRemove(key, vals[0]));
@@ -177,7 +177,7 @@ namespace NHibernate.Caches.Redis.Tests
         [Test]
         public void TestSMembers()
         {
-            var cache = _provider.BuildCache(typeof(String).FullName, new Dictionary<string, string>());
+            var cache = _provider.BuildCache(typeof(String).FullName, _props);
 
             string key = "key";
             cache.Remove(key);
@@ -201,7 +201,7 @@ namespace NHibernate.Caches.Redis.Tests
 	    [Test]
         public void TestMultiGet()
         {
-            var cache = _provider.BuildCache(typeof(String).FullName, new Dictionary<string, string>());
+            var cache = _provider.BuildCache(typeof(String).FullName, _props);
 
             List<string> keys = new List<string>()
                                     {
@@ -242,7 +242,7 @@ namespace NHibernate.Caches.Redis.Tests
             const string key = "key1";
 
             SimpleComparer comparer = new SimpleComparer();
-            var cache = _provider.BuildCache(typeof(String).FullName, new Dictionary<string, string>());
+            var cache = _provider.BuildCache(typeof(String).FullName, _props);
 
             int version1 = 1;
             string value1 = "value1";
