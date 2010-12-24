@@ -645,28 +645,63 @@ namespace NHibernate.Caches.Redis
         /// <returns></returns>
         public IDictionary MultiGet(IEnumerable keys)
         {
-            var rc = new Dictionary<object,object>();
+            var rc = new Dictionary<object, object>();
             using (var disposable = new DisposableClient(_clientManager))
             {
                 var client = disposable.Client;
-                var globalKeys = new List<string>();
-                
-                //generate global keys
+              
+                long generationFromServer = -1;
+                byte[][] resultBytesArray = null;
                 var keyCount = 0;
-                // Note: should get generation
-                foreach (var key in keys)
+                using (var pipe = client.CreatePipeline())
                 {
-                    keyCount++;
-                    globalKeys.Add(_cacheNamespace.GlobalCacheKey(key));
+                    var globalKeys = new List<string>();
+
+                    //generate global keys
+                    foreach (var key in keys)
+                    {
+                        keyCount++;
+                        globalKeys.Add(_cacheNamespace.GlobalCacheKey(key));
+                    }
+
+                    pipe.QueueCommand(r => ((RedisNativeClient) r).MGet(globalKeys.ToArray()),
+                                      x => resultBytesArray = x);
+
+                    pipe.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
+                                      x => generationFromServer = Convert.ToInt64(x));
+                    pipe.Flush();
+
                 }
-                // do multi get
-                var resultBytesArray = client.MGet(globalKeys.ToArray());
-                
+                while (generationFromServer != _cacheNamespace.GetGeneration())
+                {
+                    //update cached generation value, and try again
+                    _cacheNamespace.SetGeneration(generationFromServer);
+
+                    using (var pipe = client.CreatePipeline())
+                    {
+                        var globalKeys = new List<string>();
+
+                        //generate global keys
+                        keyCount = 0;
+                        foreach (var key in keys)
+                        {
+                            keyCount++;
+                            globalKeys.Add(_cacheNamespace.GlobalCacheKey(key));
+                        }
+
+                        pipe.QueueCommand(r => ((RedisNativeClient)r).MGet(globalKeys.ToArray()),
+                                          x => resultBytesArray = x);
+
+                        pipe.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
+                                          x => generationFromServer = Convert.ToInt64(x));
+                        pipe.Flush();
+                    }
+                }
                 if (keyCount != resultBytesArray.Length)
                     throw new RedisException("MultiGet: number of results does not match number of keys");
 
                 //process results
-                var iter = keys.GetEnumerator();   
+                var iter = keys.GetEnumerator();
                 iter.MoveNext();
                 foreach (var resultBytes in resultBytesArray)
                 {
@@ -678,8 +713,8 @@ namespace NHibernate.Caches.Redis
                     }
                     iter.MoveNext();
                 }
+                return rc;
             }
-            return rc;
         }
         /// <summary>
         /// 
