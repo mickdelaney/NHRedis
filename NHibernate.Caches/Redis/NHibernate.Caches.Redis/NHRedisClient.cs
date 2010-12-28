@@ -37,7 +37,7 @@ namespace NHibernate.Caches.Redis
     /// <summary>
     /// Redis cache client for Redis.
     /// </summary>
-	public class NhRedisClient : ICache
+	public class NhRedisClient : AbstractCache, ILiveQueryCache
 	{
 		private static readonly IInternalLogger Log;
         protected readonly PooledRedisClientManager _clientManager;
@@ -127,7 +127,7 @@ namespace NHibernate.Caches.Redis
         /// </summary>
         /// <param name="key"></param>
         /// <returns></returns>
-		public virtual object Get(object key)
+        public override object Get(object key)
 		{
 			if (key == null)
 				return null;
@@ -186,7 +186,7 @@ namespace NHibernate.Caches.Redis
         /// </summary>
         /// <param name="key"></param>
         /// <param name="value"></param>
-        public virtual void Put(object key, object value)
+        public override void Put(object key, object value)
 		{
 			if (key == null)
 				throw new ArgumentNullException("key", "null key not allowed");
@@ -258,7 +258,7 @@ namespace NHibernate.Caches.Redis
         /// the cache
         /// </summary>
         /// <param name="putParameters"></param>
-        public virtual void Put(IList<VersionedPutParameters> putParameters)
+        public override void Put(IList<VersionedPutParameters> putParameters)
         {
             //deal with null keys
             IList<ScratchCacheItem> scratchItems = new List<ScratchCacheItem>();
@@ -444,7 +444,7 @@ namespace NHibernate.Caches.Redis
         /// Remove item corresponding to key from cache
         /// </summary>
         /// <param name="key"></param>
-        public void Remove(object key)
+        public override void Remove(object key)
 		{
 			if (key == null)
 				throw new ArgumentNullException("key");
@@ -488,7 +488,7 @@ namespace NHibernate.Caches.Redis
         /// <summary>
         /// clear cache region
         /// </summary>
-		public virtual void Clear()
+        public override void Clear()
 		{
             //rename set of keys, and Start expiring the keys
             using (var disposable = new DisposableClient(_clientManager))
@@ -508,7 +508,7 @@ namespace NHibernate.Caches.Redis
         /// <summary>
         /// 
         /// </summary>
-		public void Destroy()
+        public override void Destroy()
 		{
 			Clear();
 		}
@@ -516,7 +516,7 @@ namespace NHibernate.Caches.Redis
         /// 
         /// </summary>
         /// <param name="key"></param>
-        public void Lock(object key)
+        public override void Lock(object key)
         {
             IRedisPipeline pipe = null;
             try
@@ -559,7 +559,7 @@ namespace NHibernate.Caches.Redis
         /// 
         /// </summary>
         /// <param name="key"></param>
-        public void Unlock(object key)
+        public override void Unlock(object key)
         {
             IRedisPipeline pipe = null;
             try
@@ -603,7 +603,7 @@ namespace NHibernate.Caches.Redis
         /// 
         /// </summary>
         /// <returns></returns>
-        public IDisposable GetReadLock()
+        public override IDisposable GetReadLock()
         {
             return null;
         }
@@ -611,7 +611,7 @@ namespace NHibernate.Caches.Redis
         /// 
         /// </summary>
         /// <returns></returns>
-        public IDisposable GetWriteLock()
+        public override IDisposable GetWriteLock()
         {
             return null;
         }
@@ -619,21 +619,21 @@ namespace NHibernate.Caches.Redis
         /// 
         /// </summary>
         /// <returns></returns>
-        public long NextTimestamp()
+        public override long NextTimestamp()
 		{
 			return Timestamper.Next();
 		}
         /// <summary>
         /// 
         /// </summary>
-		public int Timeout
+        public override int Timeout
 		{
 			get { return Timestamper.OneMs*60000; }
 		}
         /// <summary>
         /// 
         /// </summary>
-		public string RegionName
+        public override string RegionName
 		{
 			get { return _region; }
 		}
@@ -643,7 +643,7 @@ namespace NHibernate.Caches.Redis
         /// </summary>
         /// <param name="keys"></param>
         /// <returns></returns>
-        public IDictionary MultiGet(IEnumerable keys)
+        public override IDictionary MultiGet(IEnumerable keys)
         {
             var rc = new Dictionary<object, object>();
             using (var disposable = new DisposableClient(_clientManager))

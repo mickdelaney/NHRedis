@@ -96,6 +96,11 @@ namespace NHibernate.Caches.Redis
             return  new NhRedisClient(regionName, properties, _clientManager);
 		}
 
+        public ILiveQueryCache BuildLiveQueryCache(string regionName, IDictionary<string, string> properties)
+        {
+            return BuildCache(regionName, properties) as ILiveQueryCache;
+        }		
+
 		public long NextTimestamp()
 		{
 			return Timestamper.Next();

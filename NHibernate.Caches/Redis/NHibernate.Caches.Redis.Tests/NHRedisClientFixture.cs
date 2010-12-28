@@ -153,7 +153,7 @@ namespace NHibernate.Caches.Redis.Tests
         public void TestSAdd()
         {
             var key = "key";
-            var cache = _provider.BuildCache(typeof(String).FullName, _props);
+            var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
             Assert.IsFalse(cache.SRemove("key", "value"));
             Assert.IsTrue(cache.SAdd("key", "value"));
             Assert.IsTrue(cache.SRemove("key","value"));
@@ -163,7 +163,7 @@ namespace NHibernate.Caches.Redis.Tests
         public void TestSAddMultiple()
         {
             string key = "key";
-            var cache = _provider.BuildCache(typeof(String).FullName, _props);
+            var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
             cache.Remove(key);
             var vals = new string[]{"value1", "value2"};
             Assert.IsFalse(cache.SRemove(key, vals[0]));
@@ -177,7 +177,7 @@ namespace NHibernate.Caches.Redis.Tests
         [Test]
         public void TestSMembers()
         {
-            var cache = _provider.BuildCache(typeof(String).FullName, _props);
+            var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
 
             string key = "key";
             cache.Remove(key);
