@@ -39,16 +39,13 @@ namespace NHibernate.Caches.Redis
     /// </summary>
     public class NhRedisClientNoClear : AbstractCache, ILiveQueryCache
     {
-        private static readonly IInternalLogger Log;
         private readonly PooledRedisClientManager _clientManager;
-        private readonly int _expiry;
-
-        // NHibernate settings for cache _region and prefix
-        private readonly string _region;
-        private readonly string _regionPrefix;
 
         // manage cache _region        
         private readonly RedisNamespace _cacheNamespace;
+
+        // live query cache region
+        private readonly RedisNamespace _liveQueryCacheNamespace = new RedisNamespace(StandardQueryCache.LiveQueryCacheRegionName);
 
         static NhRedisClientNoClear()
         {
@@ -75,44 +72,13 @@ namespace NHibernate.Caches.Redis
         /// <param name="regionName"></param>
         /// <param name="properties"></param>
         /// <param name="manager"></param>
-        public NhRedisClientNoClear(string regionName, IDictionary<string, string> properties, PooledRedisClientManager manager)
+        public NhRedisClientNoClear(string regionName, IDictionary<string, string> properties, PooledRedisClientManager manager) : base(regionName, properties)
         {
-            _region = regionName;
-            var namespacePrefix = _region;
-
             _clientManager = manager;
-            _expiry = 300;
 
-            if (properties != null)
-            {
-                var expirationString = GetExpirationString(properties);
-                if (expirationString != null)
-                {
-                    _expiry = Convert.ToInt32(expirationString);
-                    if (Log.IsDebugEnabled)
-                    {
-                        Log.DebugFormat("using expiration of {0} seconds", _expiry);
-                    }
-                }
-
-                if (properties.ContainsKey("_regionPrefix"))
-                {
-                    _regionPrefix = properties["_regionPrefix"];
-                    if (_regionPrefix != null && !_regionPrefix.Equals(""))
-                        namespacePrefix = _regionPrefix + "_" + _region;
-                    if (Log.IsDebugEnabled)
-                    {
-                        Log.DebugFormat("new _regionPrefix :{0}", _regionPrefix);
-                    }
-                }
-                else
-                {
-                    if (Log.IsDebugEnabled)
-                    {
-                        Log.Debug("no _regionPrefix value given, using defaults");
-                    }
-                }
-            }
+            var namespacePrefix = _region;
+            if (_regionPrefix != null && !_regionPrefix.Equals(""))
+                namespacePrefix = _regionPrefix + "_" + _region;
             _cacheNamespace = new RedisNamespace(namespacePrefix);
 
         }
@@ -154,8 +120,11 @@ namespace NHibernate.Caches.Redis
         /// </summary>
         /// <param name="key"></param>
         /// <param name="value"></param>
-        public override void Put(object key, object value)
+        public override void Put(PutParameters putParameters)
         {
+            object key = putParameters.Key;
+            object value = putParameters.Value;
+
             if (key == null)
                 throw new ArgumentNullException("key", "null key not allowed");
             if (value == null)
@@ -383,28 +352,6 @@ namespace NHibernate.Caches.Redis
         {
             return null;
         }
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <returns></returns>
-        public override long NextTimestamp()
-        {
-            return Timestamper.Next();
-        }
-        /// <summary>
-        /// 
-        /// </summary>
-        public override int Timeout
-        {
-            get { return Timestamper.OneMs * 60000; }
-        }
-        /// <summary>
-        /// 
-        /// </summary>
-        public override string RegionName
-        {
-            get { return _region; }
-        }
 
         /// <summary>
         /// Return a dictionary of (key,value) pairs corresponding to a collection of keys
@@ -522,23 +469,6 @@ namespace NHibernate.Caches.Redis
 
             }
         }
-
-
-        /// <summary>
-        /// get value for cache _region _expiry
-        /// </summary>
-        /// <param name="props"></param>
-        /// <returns></returns>
-        private static string GetExpirationString(IDictionary<string, string> props)
-        {
-            string result;
-            if (!props.TryGetValue("expiration", out result))
-            {
-                props.TryGetValue(Environment.CacheDefaultExpiration, out result);
-            }
-            return result;
-        }
-
     }
 }
 
