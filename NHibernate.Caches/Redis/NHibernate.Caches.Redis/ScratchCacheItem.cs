@@ -4,7 +4,7 @@ namespace NHibernate.Caches.Redis
 {
     public class ScratchCacheItem
     {
-        public VersionedPutParameters PutParameters
+        public CacheVersionedPutParameters PutParameters
         { 
             get; set;
         }
@@ -17,7 +17,7 @@ namespace NHibernate.Caches.Redis
             get;
             set;
         }
-        public ScratchCacheItem(VersionedPutParameters putParameters)
+        public ScratchCacheItem(CacheVersionedPutParameters putParameters)
         {
             PutParameters = putParameters;
         }

@@ -65,7 +65,7 @@ namespace NHibernate.Caches.Redis.Tests
 			Assert.IsNotNull(cache, "no cache returned");
 
 			// add the item
-			cache.Put(new PutParameters(null, key, value) );
+			cache.Put(new CachePutParameters(null, key, value) );
 			Thread.Sleep(1000);
 
 			// make sure it's there
@@ -105,7 +105,7 @@ namespace NHibernate.Caches.Redis.Tests
 		public void TestNullKeyGet()
 		{
             var cache = _provider.BuildCache("nunit", _props);
-			cache.Put(new PutParameters(null, "nunit", "value") );
+			cache.Put(new CachePutParameters(null, "nunit", "value") );
 			Thread.Sleep(1000);
 			var item = cache.Get(null);
 			Assert.IsNull(item);
@@ -115,7 +115,7 @@ namespace NHibernate.Caches.Redis.Tests
 		public void TestNullKeyPut()
 		{
             ICache cache = new NhRedisClient();
-			Assert.Throws<ArgumentNullException>(() => cache.Put(new PutParameters()));
+			Assert.Throws<ArgumentNullException>(() => cache.Put(new CachePutParameters()));
 		}
 
 		[Test]
@@ -129,7 +129,7 @@ namespace NHibernate.Caches.Redis.Tests
 		public void TestNullValuePut()
 		{
             ICache cache = new NhRedisClient();
-			Assert.Throws<ArgumentNullException>(() => cache.Put(new PutParameters(null, "nunit", null) ));
+			Assert.Throws<ArgumentNullException>(() => cache.Put(new CachePutParameters(null, "nunit", null) ));
 		}
 
         public class SimpleComparer : IComparer
@@ -214,7 +214,7 @@ namespace NHibernate.Caches.Redis.Tests
                                         "value1", "value2", "value3"
                                     };
             for (int i = 0; i < keys.Count; ++i )
-                cache.Put(new PutParameters(null, keys[i], vals[i]));
+                cache.Put(new CachePutParameters(null, keys[i], vals[i]));
 
             IDictionary pre = cache.MultiGet(keys);
             for (int i = 0; i < keys.Count; ++i)
@@ -258,14 +258,14 @@ namespace NHibernate.Caches.Redis.Tests
 
             //check if object is cached correctly
             var versionParams =
-	        new VersionedPutParameters()
+	        new CacheVersionedPutParameters()
 	            {
 	                Key = key,
 	                Value = value1,
 	                Version = version1,
 	                VersionComparer = comparer
 	            };
-	        var list = new List<VersionedPutParameters> {versionParams};
+	        var list = new List<CacheVersionedPutParameters> {versionParams};
             cache.Put(list);
             var obj = cache.Get(key) as LockableCachedItem;
             Assert.AreEqual(obj.Value, value1);
@@ -298,7 +298,7 @@ namespace NHibernate.Caches.Redis.Tests
 
 			Assert.IsNull(cache.Get(key), "cache returned an item we didn't add !?!");
 
-			cache.Put(new PutParameters(null, key, value) );
+			cache.Put(new CachePutParameters(null, key, value) );
 			Thread.Sleep(1000);
 			var item = cache.Get(key);
 			Assert.IsNotNull(item);
@@ -313,8 +313,8 @@ namespace NHibernate.Caches.Redis.Tests
 			var cache2 = _provider.BuildCache("nunit2", _props);
 			const string s1 = "test1";
 			const string s2 = "test2";
-			cache1.Put(new PutParameters(null, key, s1) );
-			cache2.Put(new PutParameters(null, key, s2) );
+			cache1.Put(new CachePutParameters(null, key, s1) );
+			cache2.Put(new CachePutParameters(null, key, s2) );
 			Thread.Sleep(1000);
 			var get1 = cache1.Get(key);
 			var get2 = cache2.Get(key);
@@ -331,7 +331,7 @@ namespace NHibernate.Caches.Redis.Tests
 			Assert.IsNotNull(cache, "no cache returned");
 
 			// add the item
-			cache.Put(new PutParameters(null, key, value));
+			cache.Put(new CachePutParameters(null, key, value));
 			Thread.Sleep(1000);
 
 			// make sure it's there

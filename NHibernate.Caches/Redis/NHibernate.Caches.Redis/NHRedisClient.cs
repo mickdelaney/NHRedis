@@ -149,7 +149,7 @@ namespace NHibernate.Caches.Redis
         /// </summary>
         /// <param name="key"></param>
         /// <param name="value"></param>
-        public override void Put(PutParameters putParameters)
+        public override void Put(CachePutParameters putParameters)
 		{
             object key = putParameters.Key;
             object value = putParameters.Value;
@@ -224,7 +224,7 @@ namespace NHibernate.Caches.Redis
         /// the cache
         /// </summary>
         /// <param name="putParameters"></param>
-        public override void Put(IList<VersionedPutParameters> putParameters)
+        public override void Put(IList<CacheVersionedPutParameters> putParameters)
         {
             //deal with null keys
             IList<ScratchCacheItem> scratchItems = new List<ScratchCacheItem>();
