@@ -87,7 +87,7 @@ namespace NHibernate.Caches.Redis
 				Log.Debug("building cache with region: " + regionName + ", properties: " + sb);
 			}
 
-		    bool noClearClient = true;
+		    var noClearClient = true;
             if (properties.ContainsKey(NoClearPropertyKey))
                 noClearClient = properties[NoClearPropertyKey] == "true";
           

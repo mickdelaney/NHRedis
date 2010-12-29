@@ -40,15 +40,15 @@ namespace NHibernate.Caches.Redis
 	public class NhRedisClient : AbstractCache, ILiveQueryCache
 	{
 		private static readonly IInternalLogger Log;
-        protected readonly PooledRedisClientManager _clientManager;
-        protected readonly int _expiry;
+        private readonly PooledRedisClientManager _clientManager;
+        private readonly int _expiry;
 
         // NHibernate settings for cache _region and prefix
-        protected readonly string _region;
-        protected readonly string _regionPrefix;
+        private readonly string _region;
+        private readonly string _regionPrefix;
 
         // manage cache _region        
-        protected readonly RedisNamespace _cacheNamespace;
+        private readonly RedisNamespace _cacheNamespace;
 
    		static NhRedisClient()
 		{
@@ -402,7 +402,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="scratchItems"></param>
         /// <param name="client"></param>
         /// <returns></returns>
-        protected static IList<ScratchCacheItem> GenerateNewCacheItems(byte[][] currentItemsRaw, IList<ScratchCacheItem> scratchItems, CustomRedisClient client)
+        public static IList<ScratchCacheItem> GenerateNewCacheItems(byte[][] currentItemsRaw, IList<ScratchCacheItem> scratchItems, CustomRedisClient client)
         {
             if (currentItemsRaw.Length != scratchItems.Count)
                 throw new NHRedisException();
