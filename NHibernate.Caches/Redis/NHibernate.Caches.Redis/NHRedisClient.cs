@@ -27,6 +27,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using NHibernate.Engine;
 using ServiceStack.Redis;
 using NHibernate.Cache;
 using ServiceStack.Redis.Pipeline;
@@ -60,7 +61,7 @@ namespace NHibernate.Caches.Redis
 		}
 
 		public NhRedisClient(string regionName, IDictionary<string, string> properties)
-			: this(regionName, properties, null)
+			: this(regionName, null,  null, properties, null)
 		{
 		}
         /// <summary>
@@ -69,7 +70,8 @@ namespace NHibernate.Caches.Redis
         /// <param name="regionName"></param>
         /// <param name="properties"></param>
         /// <param name="manager"></param>
-        public NhRedisClient(string regionName, IDictionary<string, string> properties, PooledRedisClientManager manager) : base(regionName, properties)
+        public NhRedisClient(string regionName, IInMemoryQueryProvider inMemoryQueryProvider, string cacheConcurrencyStrategy, IDictionary<string, string> properties, PooledRedisClientManager manager)
+            : base(regionName, inMemoryQueryProvider, properties)
 		{
             _clientManager = manager;
 

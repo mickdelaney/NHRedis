@@ -61,7 +61,7 @@ namespace NHibernate.Caches.Redis.Tests
 			var key = "key1";
 			var value = "value";
 
-			var cache = _provider.BuildCache("nunit", _props);
+			var cache = _provider.BuildCache("nunit", null, null, _props);
 			Assert.IsNotNull(cache, "no cache returned");
 
 			// add the item
@@ -104,7 +104,7 @@ namespace NHibernate.Caches.Redis.Tests
 		[Test]
 		public void TestNullKeyGet()
 		{
-            var cache = _provider.BuildCache("nunit", _props);
+            var cache = _provider.BuildCache("nunit", null, null,_props);
 			cache.Put(new CachePutParameters(null, "nunit", "value") );
 			Thread.Sleep(1000);
 			var item = cache.Get(null);
@@ -201,7 +201,7 @@ namespace NHibernate.Caches.Redis.Tests
 	    [Test]
         public void TestMultiGet()
         {
-            var cache = _provider.BuildCache(typeof(String).FullName, _props);
+            var cache = _provider.BuildCache(typeof(String).FullName, null, null,_props);
 
             List<string> keys = new List<string>()
                                     {
@@ -242,7 +242,7 @@ namespace NHibernate.Caches.Redis.Tests
             const string key = "key1";
 
             SimpleComparer comparer = new SimpleComparer();
-            var cache = _provider.BuildCache(typeof(String).FullName, _props);
+            var cache = _provider.BuildCache(typeof(String).FullName, null, null, _props);
 
             int version1 = 1;
             string value1 = "value1";
@@ -293,7 +293,7 @@ namespace NHibernate.Caches.Redis.Tests
 			const string key = "key1";
 			const string value = "value";
 
-			var cache = _provider.BuildCache("nunit", _props);
+			var cache = _provider.BuildCache("nunit", null, null, _props);
 			Assert.IsNotNull(cache, "no cache returned");
 
 			Assert.IsNull(cache.Get(key), "cache returned an item we didn't add !?!");
@@ -309,8 +309,8 @@ namespace NHibernate.Caches.Redis.Tests
 		public void TestRegions()
 		{
 			const string key = "key";
-			var cache1 = _provider.BuildCache("nunit1", _props);
-			var cache2 = _provider.BuildCache("nunit2", _props);
+			var cache1 = _provider.BuildCache("nunit1", null, null,_props);
+            var cache2 = _provider.BuildCache("nunit2", null, null, _props);
 			const string s1 = "test1";
 			const string s2 = "test2";
 			cache1.Put(new CachePutParameters(null, key, s1) );
@@ -327,7 +327,7 @@ namespace NHibernate.Caches.Redis.Tests
 			const string key = "key1";
 			const string value = "value";
 
-			var cache = _provider.BuildCache("nunit", _props);
+			var cache = _provider.BuildCache("nunit", null, null,_props);
 			Assert.IsNotNull(cache, "no cache returned");
 
 			// add the item
