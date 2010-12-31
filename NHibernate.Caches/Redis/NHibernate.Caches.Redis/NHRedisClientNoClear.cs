@@ -84,8 +84,6 @@ namespace NHibernate.Caches.Redis
             _cacheNamespace = new RedisNamespace(namespacePrefix);
 
         }
-
-
         #region ICache Members
      /// <summary>
         /// 
@@ -301,11 +299,24 @@ namespace NHibernate.Caches.Redis
 
             using (var disposable = new DisposableClient(_clientManager))
             {
-                disposable.Client.Del(_cacheNamespace.GlobalCacheKey(key));
+                var client = disposable.Client;
+                using (var pipe = client.CreatePipeline())
+                {
+                      //watch for changes to cache keys
+                    pipe.QueueCommand(r => ((RedisNativeClient)r).Del(_cacheNamespace.GlobalCacheKey(key)));
+
+                    //remove object from all live query sets
+                    foreach (var liveQueryKey in _inMemoryQueryProvider.InMemoryQueries().Keys)
+                    {
+                        pipe.QueueCommand(r => ((RedisNativeClient)r).SRem(_liveQueryCacheNamespace.GlobalCacheKey(liveQueryKey), client.Serialize(key)));
+                    }
+                    pipe.Flush();
+                }
+
             }
         }
 
-     
+
         /// <summary>
         /// 
         /// </summary>
@@ -370,7 +381,6 @@ namespace NHibernate.Caches.Redis
 
                 //generate global keys
                 var keyCount = 0;
-                // Note: should get generation
                 foreach (var key in keys)
                 {
                     keyCount++;
@@ -405,7 +415,6 @@ namespace NHibernate.Caches.Redis
         /// <returns></returns>
         public IList SMembers(object key)
         {
-
             using (var disposable = new DisposableClient(_clientManager))
             {
                 var client = disposable.Client;
@@ -418,7 +427,6 @@ namespace NHibernate.Caches.Redis
                 }
                 return rc;
             }
- 
         }
         /// <summary>
         /// 
@@ -431,10 +439,7 @@ namespace NHibernate.Caches.Redis
             using (var disposable = new DisposableClient(_clientManager))
             {
                 var client = disposable.Client;
-                var bytes = client.Serialize(value);
-
-                return disposable.Client.SAdd(_cacheNamespace.GlobalCacheKey(key), bytes) == 1;
-
+                return client.SAdd(_cacheNamespace.GlobalCacheKey(key), client.Serialize(value)) == 1;
             }
         }
 
@@ -452,23 +457,23 @@ namespace NHibernate.Caches.Redis
                 var client = disposable.Client;
                 foreach (var k in keys)
                 {
-                    var bytes = client.Serialize(k);
-                    success &= client.SAdd(_cacheNamespace.GlobalCacheKey(key), bytes) == 1;
+                    success &= client.SAdd(_cacheNamespace.GlobalCacheKey(key), client.Serialize(k)) == 1;
                 }
                 return success;
-
             }
         }
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="key"></param>
+        /// <param name="value"></param>
+        /// <returns></returns>
         public bool SRemove(object key, object value)
         {
             using (var disposable = new DisposableClient(_clientManager))
             {
                 var client = disposable.Client;
-                var bytes = client.Serialize(value);
-
-                return  client.SRem(_cacheNamespace.GlobalCacheKey(key), bytes) == 1;
-
+                return client.SRem(_cacheNamespace.GlobalCacheKey(key), client.Serialize(value)) == 1;
             }
         }
     }

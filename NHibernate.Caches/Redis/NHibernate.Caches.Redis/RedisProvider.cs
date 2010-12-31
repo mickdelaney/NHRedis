@@ -115,22 +115,24 @@ namespace NHibernate.Caches.Redis
 			{
 				if (Config == null)
 				{
-					throw new ConfigurationErrorsException("Configuration for enyim.com/memcached not found");
+					throw new ConfigurationErrorsException("Configuration for NHRedis not found");
 				}
 
 
                 if (_clientManager == null)
                 {
 
-                    RedisClientManagerConfig poolConfig = new RedisClientManagerConfig();
-                    poolConfig.MaxReadPoolSize = Config.MaxReadPoolSize;
-                    poolConfig.MaxWritePoolSize = Config.MaxWritePoolSize;
+                    var poolConfig = new RedisClientManagerConfig
+                                         {
+                                             MaxReadPoolSize = Config.MaxReadPoolSize,
+                                             MaxWritePoolSize = Config.MaxWritePoolSize
+                                         };
 
-                    List<string> readWrite = new List<string>() { Config.Host };
                     _clientManager = new PooledRedisClientManager(new List<string>() { Config.Host },
-                                                    new List<string>(), poolConfig);
-                    _clientManager.RedisClientFactory = new CustomRedisClientFactory();
-
+                                                    new List<string>(), poolConfig)
+                                         {
+                                             RedisClientFactory = new CustomRedisClientFactory()
+                                         };
                 }
                 GarbageCollector.Start();
 			}

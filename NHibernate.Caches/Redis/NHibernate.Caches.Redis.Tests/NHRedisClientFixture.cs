@@ -28,8 +28,14 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
+using Iesi.Collections;
+using Iesi.Collections.Generic;
 using log4net.Config;
 using NHibernate.Cache;
+using NHibernate.Engine;
+using NHibernate.Impl;
+using NHibernate.SqlCommand;
+using NHibernate.Util;
 using NUnit.Framework;
 
 namespace NHibernate.Caches.Redis.Tests
@@ -38,6 +44,30 @@ namespace NHibernate.Caches.Redis.Tests
 	{
 		protected Dictionary<string, string> _props;
 		protected ICacheProvider _provider;
+
+        public class TestInMemoryQuery : IInMemoryQuery
+        {
+            public bool Match(object entity)
+            {
+                return true;
+            }
+        }
+
+        public class TestInMemoryQueryProvider : IInMemoryQueryProvider
+	    {
+            private readonly IThreadSafeDictionary<QueryKey, IInMemoryQuery> _queries = new ThreadSafeDictionary<QueryKey, IInMemoryQuery>();
+
+            public TestInMemoryQueryProvider()
+            {
+                var qk = new QueryKey(null, new SqlString("1=1"), new QueryParameters(), new HashedSet());
+                _queries[qk] = new TestInMemoryQuery();
+            }
+
+            public IThreadSafeDictionary<QueryKey, IInMemoryQuery> InMemoryQueries()
+            {
+                return _queries;
+            }
+	    }
 
 		[TestFixtureSetUp]
 		public void FixtureSetup()
@@ -61,7 +91,7 @@ namespace NHibernate.Caches.Redis.Tests
 			var key = "key1";
 			var value = "value";
 
-			var cache = _provider.BuildCache("nunit", null, null, _props);
+			var cache = _provider.BuildCache("nunit", new TestInMemoryQueryProvider(), null, _props);
 			Assert.IsNotNull(cache, "no cache returned");
 
 			// add the item
@@ -104,7 +134,7 @@ namespace NHibernate.Caches.Redis.Tests
 		[Test]
 		public void TestNullKeyGet()
 		{
-            var cache = _provider.BuildCache("nunit", null, null,_props);
+            var cache = _provider.BuildCache("nunit", new TestInMemoryQueryProvider(), null, _props);
 			cache.Put(new CachePutParameters(null, "nunit", "value") );
 			Thread.Sleep(1000);
 			var item = cache.Get(null);
@@ -201,7 +231,7 @@ namespace NHibernate.Caches.Redis.Tests
 	    [Test]
         public void TestMultiGet()
         {
-            var cache = _provider.BuildCache(typeof(String).FullName, null, null,_props);
+            var cache = _provider.BuildCache(typeof(String).FullName, new TestInMemoryQueryProvider(), null, _props);
 
             List<string> keys = new List<string>()
                                     {
@@ -242,7 +272,7 @@ namespace NHibernate.Caches.Redis.Tests
             const string key = "key1";
 
             SimpleComparer comparer = new SimpleComparer();
-            var cache = _provider.BuildCache(typeof(String).FullName, null, null, _props);
+            var cache = _provider.BuildCache(typeof(String).FullName, new TestInMemoryQueryProvider(), null, _props);
 
             int version1 = 1;
             string value1 = "value1";
@@ -309,8 +339,8 @@ namespace NHibernate.Caches.Redis.Tests
 		public void TestRegions()
 		{
 			const string key = "key";
-			var cache1 = _provider.BuildCache("nunit1", null, null,_props);
-            var cache2 = _provider.BuildCache("nunit2", null, null, _props);
+            var cache1 = _provider.BuildCache("nunit1", new TestInMemoryQueryProvider(), null, _props);
+            var cache2 = _provider.BuildCache("nunit2", new TestInMemoryQueryProvider(), null, _props);
 			const string s1 = "test1";
 			const string s2 = "test2";
 			cache1.Put(new CachePutParameters(null, key, s1) );
@@ -327,7 +357,7 @@ namespace NHibernate.Caches.Redis.Tests
 			const string key = "key1";
 			const string value = "value";
 
-			var cache = _provider.BuildCache("nunit", null, null,_props);
+            var cache = _provider.BuildCache("nunit", new TestInMemoryQueryProvider(), null, _props);
 			Assert.IsNotNull(cache, "no cache returned");
 
 			// add the item
