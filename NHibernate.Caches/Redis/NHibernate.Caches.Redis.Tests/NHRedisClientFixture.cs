@@ -63,7 +63,7 @@ namespace NHibernate.Caches.Redis.Tests
                 _queries[qk] = new TestInMemoryQuery();
             }
 
-            public IThreadSafeDictionary<QueryKey, IInMemoryQuery> InMemoryQueries()
+            public IThreadSafeDictionary<QueryKey, IInMemoryQuery> GetQueries()
             {
                 return _queries;
             }
@@ -272,7 +272,7 @@ namespace NHibernate.Caches.Redis.Tests
             const string key = "key1";
 
             SimpleComparer comparer = new SimpleComparer();
-            var cache = _provider.BuildCache(typeof(String).FullName, new TestInMemoryQueryProvider(), null, _props);
+            var cache = _provider.BuildCache(typeof(String).FullName, new TestInMemoryQueryProvider(), CacheFactory.ReadWriteCow, _props);
 
             int version1 = 1;
             string value1 = "value1";
@@ -323,7 +323,7 @@ namespace NHibernate.Caches.Redis.Tests
 			const string key = "key1";
 			const string value = "value";
 
-			var cache = _provider.BuildCache("nunit", null, null, _props);
+            var cache = _provider.BuildCache("nunit", new TestInMemoryQueryProvider(), CacheFactory.ReadWriteCow, _props);
 			Assert.IsNotNull(cache, "no cache returned");
 
 			Assert.IsNull(cache.Get(key), "cache returned an item we didn't add !?!");
@@ -339,8 +339,8 @@ namespace NHibernate.Caches.Redis.Tests
 		public void TestRegions()
 		{
 			const string key = "key";
-            var cache1 = _provider.BuildCache("nunit1", new TestInMemoryQueryProvider(), null, _props);
-            var cache2 = _provider.BuildCache("nunit2", new TestInMemoryQueryProvider(), null, _props);
+            var cache1 = _provider.BuildCache("nunit1", new TestInMemoryQueryProvider(), CacheFactory.ReadWriteCow, _props);
+            var cache2 = _provider.BuildCache("nunit2", new TestInMemoryQueryProvider(), CacheFactory.ReadWriteCow, _props);
 			const string s1 = "test1";
 			const string s2 = "test2";
 			cache1.Put(new CachePutParameters(null, key, s1) );
@@ -357,7 +357,7 @@ namespace NHibernate.Caches.Redis.Tests
 			const string key = "key1";
 			const string value = "value";
 
-            var cache = _provider.BuildCache("nunit", new TestInMemoryQueryProvider(), null, _props);
+            var cache = _provider.BuildCache("nunit", new TestInMemoryQueryProvider(), CacheFactory.ReadWriteCow, _props);
 			Assert.IsNotNull(cache, "no cache returned");
 
 			// add the item

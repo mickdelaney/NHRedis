@@ -74,7 +74,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="properties"></param>
         /// <param name="manager"></param>
         public NhRedisClientNoClear(string regionName, IInMemoryQueryProvider inMemoryQueryProvider, string cacheConcurrencyStrategy, IDictionary<string, string> properties, PooledRedisClientManager manager)
-            : base(regionName, inMemoryQueryProvider, properties)
+            : base(regionName, inMemoryQueryProvider, cacheConcurrencyStrategy, properties)
         {
             _clientManager = manager;
 
@@ -115,15 +115,15 @@ namespace NHibernate.Caches.Redis
             return rc;
         }
 
+ 
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="key"></param>
-        /// <param name="value"></param>
+        /// <param name="putParameters"></param>
         public override void Put(CachePutParameters putParameters)
         {
-            object key = putParameters.Key;
-            object value = putParameters.Value;
+            var key = putParameters.Key;
+            var value = putParameters.Value;
 
             if (key == null)
                 throw new ArgumentNullException("key", "null key not allowed");
@@ -132,6 +132,7 @@ namespace NHibernate.Caches.Redis
             if (Log.IsDebugEnabled)
                 Log.DebugFormat("setting value for item {0}", key);
 
+ 
             try
             {
                 using (var disposable = new DisposableClient(_clientManager))
@@ -143,7 +144,7 @@ namespace NHibernate.Caches.Redis
                     {
                         pipe.QueueCommand(r => ((IRedisNativeClient)r).SetEx(globalKey, _expiry, client.Serialize(value)));
                      
-                        // update live query cache
+                        QueueLiveQueryUpdates(putParameters.HydratedObject, key, pipe, false);
 
                         pipe.Flush();
                     }
@@ -222,10 +223,8 @@ namespace NHibernate.Caches.Redis
                                     _expiry, scratch.NewCacheItemRaw));
 
                             // update live query cache
-
-
+                            QueueLiveQueryUpdates(scratch.PutParameters.HydratedObject, scratch.PutParameters.Key, (IRedisPipeline)trans, true);
                         }
-
                         success = trans.Commit();
                     }
                     while (!success)
@@ -306,9 +305,15 @@ namespace NHibernate.Caches.Redis
                     pipe.QueueCommand(r => ((RedisNativeClient)r).Del(_cacheNamespace.GlobalCacheKey(key)));
 
                     //remove object from all live query sets
-                    foreach (var liveQueryKey in _inMemoryQueryProvider.InMemoryQueries().Keys)
+                    if (SupportsLiveQueries())
                     {
-                        pipe.QueueCommand(r => ((RedisNativeClient)r).SRem(_liveQueryCacheNamespace.GlobalCacheKey(liveQueryKey), client.Serialize(key)));
+                        foreach (var liveQueryKey in _inMemoryQueryProvider.GetQueries().Keys)
+                        {
+                            pipe.QueueCommand(
+                                r =>
+                                ((RedisNativeClient) r).SRem(_liveQueryCacheNamespace.GlobalCacheKey(liveQueryKey),
+                                                             client.Serialize(key)));
+                        }
                     }
                     pipe.Flush();
                 }
@@ -474,6 +479,25 @@ namespace NHibernate.Caches.Redis
             {
                 var client = disposable.Client;
                 return client.SRem(_cacheNamespace.GlobalCacheKey(key), client.Serialize(value)) == 1;
+            }
+        }
+
+        private void QueueLiveQueryUpdates(object hydratedObject, object cacheKey, IRedisPipeline pipe, bool handleRemove)
+        {
+            // update live query cache
+            if (!SupportsLiveQueries()) return;
+            foreach (var query in DirtyQueryKeys(hydratedObject))
+            {
+                if (query.IsDirty)
+                    pipe.QueueCommand(
+                        r => ((IRedisNativeClient)r).SAdd(
+                                 _liveQueryCacheNamespace.GlobalCacheKey(query.Key),
+                                 ((CustomRedisClient)r).Serialize(cacheKey)));
+                else if (handleRemove)
+                    pipe.QueueCommand(
+                        r => ((IRedisNativeClient)r).SRem(
+                                 _liveQueryCacheNamespace.GlobalCacheKey(query.Key),
+                                 ((CustomRedisClient)r).Serialize(cacheKey)));
             }
         }
     }

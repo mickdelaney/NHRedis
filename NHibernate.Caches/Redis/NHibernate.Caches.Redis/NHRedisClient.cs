@@ -71,7 +71,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="properties"></param>
         /// <param name="manager"></param>
         public NhRedisClient(string regionName, IInMemoryQueryProvider inMemoryQueryProvider, string cacheConcurrencyStrategy, IDictionary<string, string> properties, PooledRedisClientManager manager)
-            : base(regionName, inMemoryQueryProvider, properties)
+            : base(regionName, inMemoryQueryProvider, cacheConcurrencyStrategy, properties)
 		{
             _clientManager = manager;
 
