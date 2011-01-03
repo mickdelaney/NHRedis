@@ -54,27 +54,29 @@ namespace NHibernate.Caches.Redis
             {
                 XmlNodeList nodes = section.SelectNodes("redis");
                 XmlNode node = nodes[0];
-  
-                    XmlAttribute h = node.Attributes["host"];
-                    XmlAttribute p = node.Attributes["port"];
-                    XmlAttribute maxReadPoolSize = node.Attributes["maxReadPoolSize"];
-                    XmlAttribute maxWritePoolSize = node.Attributes["maxWritePoolSize"];
-                    if (h == null || p == null)
+                XmlAttribute h=null, p=null, maxReadPoolSize=null, maxWritePoolSize=null;
+                if (node != null)
+                {
+                    h = node.Attributes["host"];
+                    p = node.Attributes["port"];
+                    maxReadPoolSize = node.Attributes["maxReadPoolSize"];
+                    maxWritePoolSize = node.Attributes["maxWritePoolSize"];
+                }
+                var host = (h != null && h.Value != null) ? h.Value :  "localhost";
+                var port =  p != null ? parseInt(p) : 6379;
+		        if (h == null || p == null)
+                {
+                    if (log.IsWarnEnabled)
                     {
-                        if (log.IsWarnEnabled)
-                        {
-                            log.Warn("incomplete node found - each redis element must have a 'host' and a 'port' attribute.");
-                        }
-                    } else 
-                    {
-                        string host = h.Value;
-                        config = new RedisConfig(host, parseInt(p));
-                        if (maxReadPoolSize != null)
-                            config.MaxReadPoolSize = parseInt(maxReadPoolSize);
-                        if (maxWritePoolSize != null)
-                            config.MaxWritePoolSize = parseInt(maxWritePoolSize);
-
+                        log.Warn("incomplete node found - each redis element must have a 'host' and a 'port' attribute. Using default value(s)");
                     }
+                  
+                } 
+                config = new RedisConfig(host, port);
+                if (maxReadPoolSize != null)
+                    config.MaxReadPoolSize = parseInt(maxReadPoolSize);
+                if (maxWritePoolSize != null)
+                    config.MaxWritePoolSize = parseInt(maxWritePoolSize);
             }
             return config;
 		}

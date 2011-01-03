@@ -196,10 +196,11 @@ namespace NHibernate.Caches.Redis
                     pipe = client.CreatePipeline();
 
                     //watch for changes to cache keys
-                    pipe.QueueCommand(r => ((RedisClient)r).Watch(GlobalKeys(scratchItems)));
+                    IList<ScratchCacheItem> items = scratchItems;
+                    pipe.QueueCommand(r => ((RedisClient)r).Watch(GlobalKeys(items)));
 
                     //get all of the current objects
-                    pipe.QueueCommand(r => ((RedisNativeClient)r).MGet(GlobalKeys(scratchItems)), x => currentItemsRaw = x);
+                    pipe.QueueCommand(r => ((RedisNativeClient)r).MGet(GlobalKeys(items)), x => currentItemsRaw = x);
 
                     pipe.Flush();
 
@@ -217,10 +218,11 @@ namespace NHibernate.Caches.Redis
                         foreach (var scratch in scratchItems)
                         {
                             //setex on all new objects
+                            ScratchCacheItem item = scratch;
                             trans.QueueCommand(
                                 r => ((IRedisNativeClient) r).SetEx(
-                                    _cacheNamespace.GlobalCacheKey(scratch.PutParameters.Key),
-                                    _expiry, scratch.NewCacheValueRaw));
+                                    _cacheNamespace.GlobalCacheKey(item.PutParameters.Key),
+                                    _expiry, client.Serialize(item.NewCacheValue) ));
 
                             // update live query cache
                             QueueLiveQueryUpdates(scratch.PutParameters.HydratedObject, scratch.PutParameters.Key, trans, true);
@@ -243,11 +245,12 @@ namespace NHibernate.Caches.Redis
                             foreach (var scratch in scratchItems)
                             {
                                 //setex on all new objects
+                                ScratchCacheItem item = scratch;
                                 trans.QueueCommand(
                                     r =>
                                     ((IRedisNativeClient)r).SetEx(
-                                        _cacheNamespace.GlobalCacheKey(scratch.PutParameters.Key),
-                                        _expiry, scratch.NewCacheValueRaw));
+                                        _cacheNamespace.GlobalCacheKey(item.PutParameters.Key),
+                                        _expiry, client.Serialize(item.NewCacheValue) ));
                             }
 
                             //update live query cache 
@@ -309,9 +312,10 @@ namespace NHibernate.Caches.Redis
                     {
                         foreach (var liveQueryKey in _inMemoryQueryProvider.GetQueries().Keys)
                         {
+                            QueryKey queryKey = liveQueryKey;
                             pipe.QueueCommand(
                                 r =>
-                                ((RedisNativeClient) r).SRem(_liveQueryCacheNamespace.GlobalCacheKey(liveQueryKey),
+                                ((RedisNativeClient) r).SRem(_liveQueryCacheNamespace.GlobalCacheKey(queryKey),
                                                              client.Serialize(key)));
                         }
                     }
@@ -489,15 +493,21 @@ namespace NHibernate.Caches.Redis
             foreach (var query in DirtyQueryKeys(hydratedObject))
             {
                 if (query.IsDirty)
+                {
+                    DirtyQueryKey key = query;
                     pipe.QueueCommand(
                         r => ((IRedisNativeClient)r).SAdd(
-                                 _liveQueryCacheNamespace.GlobalCacheKey(query.Key),
+                                 _liveQueryCacheNamespace.GlobalCacheKey(key.Key),
                                  ((CustomRedisClient)r).Serialize(cacheKey)));
+                }
                 else if (handleRemove)
+                {
+                    DirtyQueryKey key = query;
                     pipe.QueueCommand(
                         r => ((IRedisNativeClient)r).SRem(
-                                 _liveQueryCacheNamespace.GlobalCacheKey(query.Key),
+                                 _liveQueryCacheNamespace.GlobalCacheKey(key.Key),
                                  ((CustomRedisClient)r).Serialize(cacheKey)));
+                }
             }
 
         }

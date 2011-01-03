@@ -70,7 +70,7 @@ namespace NHibernate.Caches.Redis.Tests
 	    }
 
 		[TestFixtureSetUp]
-		public void FixtureSetup()
+		public virtual void FixtureSetup()
 		{
 			XmlConfigurator.Configure();
 			_props = new Dictionary<string, string> {{RedisProvider.NoClearPropertyKey, "false"}, 
@@ -194,7 +194,11 @@ namespace NHibernate.Caches.Redis.Tests
         {
             string key = "key";
             var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
-            cache.Remove(key);
+            var members = cache.SMembers(key);
+            foreach (var member in members)
+            {
+                cache.SRemove(key, member);
+            }
             var vals = new string[]{"value1", "value2"};
             Assert.IsFalse(cache.SRemove(key, vals[0]));
             Assert.IsFalse(cache.SRemove(key, vals[1]));
@@ -210,7 +214,11 @@ namespace NHibernate.Caches.Redis.Tests
             var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
 
             string key = "key";
-            cache.Remove(key);
+            var members = cache.SMembers(key);
+            foreach (var member in members)
+            {
+                cache.SRemove(key, member);
+            }
 
             var vals = new ArrayList()
                                     {
@@ -219,13 +227,12 @@ namespace NHibernate.Caches.Redis.Tests
             for (int i = 0; i < vals.Count; ++i)
                 cache.SAdd(key, vals[i]);
 
-            IEnumerable members = cache.SMembers(key);
+            members = cache.SMembers(key);
             foreach (var member in members)
             {
                 Assert.IsTrue(vals.Contains(member));
             }
-            
-            
+ 
          }
 
 	    [Test]
@@ -269,9 +276,9 @@ namespace NHibernate.Caches.Redis.Tests
 	    [Test]
         public void TestVersionedPut()
         {
-            const string key = "key1";
+            const string key1 = "key1";
 
-            SimpleComparer comparer = new SimpleComparer();
+            var comparer = new SimpleComparer();
             var cache = _provider.BuildCache(typeof(String).FullName, new TestInMemoryQueryProvider(), CacheFactory.ReadWriteCow, _props);
 
             int version1 = 1;
@@ -283,41 +290,74 @@ namespace NHibernate.Caches.Redis.Tests
             int version3 = 3;
             string value3 = "value3";
 
-            cache.Remove(key);
+            cache.Remove(key1);
 
 
             //check if object is cached correctly
             var versionParams =
 	        new CacheVersionedPutParameters()
 	            {
-	                Key = key,
+	                Key = key1,
 	                Value = value1,
 	                Version = version1,
 	                VersionComparer = comparer
 	            };
 	        var list = new List<CacheVersionedPutParameters> {versionParams};
             cache.Put(list);
-            var obj = cache.Get(key) as LockableCachedItem;
+            var obj = cache.Get(key1) as LockableCachedItem;
             Assert.AreEqual(obj.Value, value1);
 
 	        versionParams.Value = value2;
 	        versionParams.Version = version2;
             // check that object changes with next version
             cache.Put(list);
-            obj = cache.Get(key) as LockableCachedItem;
+            obj = cache.Get(key1) as LockableCachedItem;
             Assert.AreEqual(obj.Value, value2);
 
             // check that older version does not change cache
             versionParams.Value = value3;
             versionParams.Version = version1;
             cache.Put(list);
-            obj = cache.Get(key) as LockableCachedItem;
+            obj = cache.Get(key1) as LockableCachedItem;
             Assert.AreEqual(obj.Value, value2);
-       
+
 
         }
-        
-		[Test]
+
+        [Test]
+        public void TestVersionedPutMultiple()
+        {
+            var comparer = new SimpleComparer();
+            var cache = _provider.BuildCache(typeof(String).FullName, new TestInMemoryQueryProvider(), CacheFactory.ReadWriteCow, _props);
+
+            // test put on list
+            var keys = new[] { "key1", "key2", "key3" };
+            var values = new[] { "value1", "value2", "value3" };
+            var versions = new[] { 1, 2, 3 };
+
+            foreach (var k in keys)
+                cache.Remove(k);
+            var list = new List<CacheVersionedPutParameters>(3);
+            for (int i = 0; i < 3; ++i)
+                list.Add(new CacheVersionedPutParameters()
+                {
+                    Key = keys[i],
+                    Value = values[i],
+                    Version = versions[i],
+                    VersionComparer = comparer
+                });
+
+            cache.Put(list);
+
+            for (int i = 0; i < 3; ++i)
+            {
+                var res = cache.Get(keys[i]) as LockableCachedItem;
+                Assert.AreEqual(res.Value, values[i]);
+                Assert.AreEqual(res.Version, versions[i]);
+            }
+        }
+
+	    [Test]
 		public void TestPut()
 		{
 			const string key = "key1";

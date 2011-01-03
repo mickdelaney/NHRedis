@@ -13,11 +13,6 @@ namespace NHibernate.Caches.Redis
         {
             get; set;
         }
-        public byte[] NewCacheValueRaw
-        {
-            get;
-            set;
-        }
         public object NewCacheValue
         {
             get;
