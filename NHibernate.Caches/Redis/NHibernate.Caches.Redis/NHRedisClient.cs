@@ -286,7 +286,7 @@ namespace NHibernate.Caches.Redis
                                 r =>
                                 ((IRedisNativeClient) r).SetEx(
                                     _cacheNamespace.GlobalCacheKey(scratch.PutParameters.Key),
-                                    _expiry, scratch.NewCacheItemRaw));
+                                    _expiry, scratch.NewCacheValueRaw));
 
                             //add keys to globalKeys set for this namespace
                             trans.QueueCommand(r => r.AddItemToSet(_cacheNamespace.GetGlobalKeysKey(),
@@ -327,7 +327,7 @@ namespace NHibernate.Caches.Redis
                                     r =>
                                     ((IRedisNativeClient)r).SetEx(
                                         _cacheNamespace.GlobalCacheKey(scratch.PutParameters.Key),
-                                        _expiry, scratch.NewCacheItemRaw));
+                                        _expiry, scratch.NewCacheValueRaw));
 
                                 //add keys to globalKeys set for this namespace
                                 trans.QueueCommand(r => r.AddItemToSet(_cacheNamespace.GetGlobalKeysKey(),
@@ -399,8 +399,9 @@ namespace NHibernate.Caches.Redis
                     currentLockableCachedItem.Update(value, version, versionComparator);
                     newItem = currentLockableCachedItem;
                 }
-                scratch.NewCacheItemRaw = client.Serialize(newItem);
-                if (scratch.NewCacheItemRaw != null)
+                scratch.NewCacheValue = newItem;
+                scratch.NewCacheValueRaw = client.Serialize(newItem);
+                if (scratch.NewCacheValueRaw != null)
                     puttableScratchItems.Add(scratch);
                 
             }

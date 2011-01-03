@@ -220,10 +220,10 @@ namespace NHibernate.Caches.Redis
                             trans.QueueCommand(
                                 r => ((IRedisNativeClient) r).SetEx(
                                     _cacheNamespace.GlobalCacheKey(scratch.PutParameters.Key),
-                                    _expiry, scratch.NewCacheItemRaw));
+                                    _expiry, scratch.NewCacheValueRaw));
 
                             // update live query cache
-                            QueueLiveQueryUpdates(scratch.PutParameters.HydratedObject, scratch.PutParameters.Key, (IRedisPipeline)trans, true);
+                            QueueLiveQueryUpdates(scratch.PutParameters.HydratedObject, scratch.PutParameters.Key, trans, true);
                         }
                         success = trans.Commit();
                     }
@@ -247,7 +247,7 @@ namespace NHibernate.Caches.Redis
                                     r =>
                                     ((IRedisNativeClient)r).SetEx(
                                         _cacheNamespace.GlobalCacheKey(scratch.PutParameters.Key),
-                                        _expiry, scratch.NewCacheItemRaw));
+                                        _expiry, scratch.NewCacheValueRaw));
                             }
 
                             //update live query cache 
@@ -284,7 +284,7 @@ namespace NHibernate.Caches.Redis
             // this class is designed around the assumption that clear is never called
             throw new NHRedisException();
         }
-        #endregion
+ 
         /// <summary>
         /// Remove item corresponding to key from cache
         /// </summary>
@@ -322,13 +322,7 @@ namespace NHibernate.Caches.Redis
         }
 
 
-        /// <summary>
-        /// 
-        /// </summary>
-        public override void Destroy()
-        {
-            Clear();
-        }
+
         /// <summary>
         /// 
         /// </summary>
@@ -413,6 +407,11 @@ namespace NHibernate.Caches.Redis
             }
             return rc;
         }
+
+        #endregion
+
+        #region ILiveQueryCache Members
+
         /// <summary>
         /// 
         /// </summary>
@@ -423,7 +422,7 @@ namespace NHibernate.Caches.Redis
             using (var disposable = new DisposableClient(_clientManager))
             {
                 var client = disposable.Client;
-                var members = client.SMembers(_cacheNamespace.GlobalCacheKey(key));
+                var members = client.SMembers(_liveQueryCacheNamespace.GlobalCacheKey(key));
 
                 var rc = new ArrayList();
                 foreach (var item in members)
@@ -444,7 +443,7 @@ namespace NHibernate.Caches.Redis
             using (var disposable = new DisposableClient(_clientManager))
             {
                 var client = disposable.Client;
-                return client.SAdd(_cacheNamespace.GlobalCacheKey(key), client.Serialize(value)) == 1;
+                return client.SAdd(_liveQueryCacheNamespace.GlobalCacheKey(key), client.Serialize(value)) == 1;
             }
         }
 
@@ -462,7 +461,7 @@ namespace NHibernate.Caches.Redis
                 var client = disposable.Client;
                 foreach (var k in keys)
                 {
-                    success &= client.SAdd(_cacheNamespace.GlobalCacheKey(key), client.Serialize(k)) == 1;
+                    success &= client.SAdd(_liveQueryCacheNamespace.GlobalCacheKey(key), client.Serialize(k)) == 1;
                 }
                 return success;
             }
@@ -478,12 +477,13 @@ namespace NHibernate.Caches.Redis
             using (var disposable = new DisposableClient(_clientManager))
             {
                 var client = disposable.Client;
-                return client.SRem(_cacheNamespace.GlobalCacheKey(key), client.Serialize(value)) == 1;
+                return client.SRem(_liveQueryCacheNamespace.GlobalCacheKey(key), client.Serialize(value)) == 1;
             }
         }
 
-        private void QueueLiveQueryUpdates(object hydratedObject, object cacheKey, IRedisPipeline pipe, bool handleRemove)
+        private void QueueLiveQueryUpdates(object hydratedObject, object cacheKey, IRedisQueueableOperation pipe, bool handleRemove)
         {
+            
             // update live query cache
             if (!SupportsLiveQueries()) return;
             foreach (var query in DirtyQueryKeys(hydratedObject))
@@ -499,6 +499,16 @@ namespace NHibernate.Caches.Redis
                                  _liveQueryCacheNamespace.GlobalCacheKey(query.Key),
                                  ((CustomRedisClient)r).Serialize(cacheKey)));
             }
+
+        }
+        #endregion
+
+        /// <summary>
+        /// 
+        /// </summary>
+        public override void Destroy()
+        {
+            Clear();
         }
     }
 }

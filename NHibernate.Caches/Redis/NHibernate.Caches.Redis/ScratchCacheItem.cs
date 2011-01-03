@@ -1,4 +1,5 @@
-﻿using NHibernate.Cache;
+﻿using System;
+using NHibernate.Cache;
 
 namespace NHibernate.Caches.Redis
 {
@@ -12,7 +13,12 @@ namespace NHibernate.Caches.Redis
         {
             get; set;
         }
-        public byte[] NewCacheItemRaw
+        public byte[] NewCacheValueRaw
+        {
+            get;
+            set;
+        }
+        public object NewCacheValue
         {
             get;
             set;
@@ -20,6 +26,13 @@ namespace NHibernate.Caches.Redis
         public ScratchCacheItem(CacheVersionedPutParameters putParameters)
         {
             PutParameters = putParameters;
+        }
+        public override string ToString()
+        {
+            return "ScratchCacheItem: " + PutParameters +
+                   ", current cache value = " + CurrentCacheValue +
+                   ", new cache value = " + NewCacheValue +
+                   "}";
         }
     }
 }

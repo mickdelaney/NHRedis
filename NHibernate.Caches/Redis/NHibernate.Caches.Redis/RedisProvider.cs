@@ -44,7 +44,7 @@ namespace NHibernate.Caches.Redis
         private PooledRedisClientManager _clientManager;
 		private static readonly object SyncObject = new object();
 
-        private static readonly RedisGarbageCollector GarbageCollector;
+        private static RedisGarbageCollector _garbageCollector;
 
         public static string ExpirationPropertyKey = "expiration";
         public static string NoClearPropertyKey = "no_clear_on_client";
@@ -58,7 +58,7 @@ namespace NHibernate.Caches.Redis
 				Log.Info("redis configuration section not found, using default configuration (127.0.0.1:6379).");
 				Config = new RedisConfig("localhost",6379);
     		}
-            GarbageCollector = new RedisGarbageCollector(Config.Host, Config.Port);
+           
 
 		}
 
@@ -134,7 +134,14 @@ namespace NHibernate.Caches.Redis
                                              RedisClientFactory = new CustomRedisClientFactory()
                                          };
                 }
-                GarbageCollector.Start();
+                if (_garbageCollector == null)
+                {
+                   // Note: garbage collections disabled because we are using the optimized NHRedis client that
+                   // never clears, so no gc needed
+                   // _garbageCollector = new RedisGarbageCollector(Config.Host, Config.Port);
+                   // _garbageCollector.Start();
+                }
+               
 			}
 		}
 
@@ -145,7 +152,12 @@ namespace NHibernate.Caches.Redis
                 _clientManager.Dispose();
                 _clientManager = null;
 
-                GarbageCollector.Stop();
+                if (_garbageCollector != null)
+                {
+                    _garbageCollector.Stop();
+                    _garbageCollector = null;      
+                }
+  
 			}
 		}
 
