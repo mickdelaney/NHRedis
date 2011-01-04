@@ -28,7 +28,7 @@ using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Text;
-using NHibernate.Engine;
+using NHibernate.Cache.Query;
 using ServiceStack.Redis;
 using NHibernate.Cache;
 

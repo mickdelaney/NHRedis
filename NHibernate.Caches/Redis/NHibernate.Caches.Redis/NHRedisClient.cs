@@ -30,6 +30,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using NHibernate.Engine;
 using ServiceStack.Redis;
+using NHibernate.Cache.Query;
 using NHibernate.Cache;
 using ServiceStack.Redis.Pipeline;
 using Environment = NHibernate.Cfg.Environment;
@@ -669,7 +670,7 @@ namespace NHibernate.Caches.Redis
         /// </summary>
         /// <param name="key"></param>
         /// <returns></returns>
-        public IList SMembers(object key)
+        public IList HGetAll(object key)
         {
             IRedisPipeline pipe = null;
             try
@@ -715,7 +716,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="key"></param>
         /// <param name="value"></param>
         /// <returns></returns>
-        public bool SAdd(object key, object value)
+        public bool HSet(object key, object field, object value)
         {
             int rc = 0;
             IRedisPipeline pipe = null;
@@ -755,9 +756,9 @@ namespace NHibernate.Caches.Redis
         /// 
         /// </summary>
         /// <param name="key"></param>
-        /// <param name="keys"></param>
+        /// <param name="values"></param>
         /// <returns></returns>
-        public bool SAdd(object key, IList keys)
+        public bool HSet(object key, IList fields, IList values)
         {
             IRedisPipeline pipe = null;
             bool success = false;
@@ -770,7 +771,7 @@ namespace NHibernate.Caches.Redis
                     long generationFromServer = _cacheNamespace.GetGeneration();
                     pipe = client.CreatePipeline();
 
-                    foreach (var k in keys)
+                    foreach (var k in values)
                     {
                         var bytes = client.Serialize(k);
                         pipe.QueueCommand(r => ((RedisNativeClient)r).SAdd(_cacheNamespace.GlobalCacheKey(key), bytes), x => success &= x == 1  );
@@ -800,7 +801,7 @@ namespace NHibernate.Caches.Redis
             return success;
        }
 
-        public bool SRemove(object key, object value)
+        public bool HDel(object key, object field, object value)
         {
             int rc = 0;
             IRedisPipeline pipe = null;

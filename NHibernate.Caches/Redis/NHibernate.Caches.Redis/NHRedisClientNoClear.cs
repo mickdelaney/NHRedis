@@ -27,7 +27,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using NHibernate.Engine;
+using NHibernate.Cache.Query;
 using ServiceStack.Redis;
 using NHibernate.Cache;
 using ServiceStack.Redis.Pipeline;
@@ -421,7 +421,7 @@ namespace NHibernate.Caches.Redis
         /// </summary>
         /// <param name="key"></param>
         /// <returns></returns>
-        public IList SMembers(object key)
+        public IList HGetAll(object key)
         {
             using (var disposable = new DisposableClient(_clientManager))
             {
@@ -442,7 +442,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="key"></param>
         /// <param name="value"></param>
         /// <returns></returns>
-        public bool SAdd(object key, object value)
+        public bool HSet(object key, object field, object value)
         {
             using (var disposable = new DisposableClient(_clientManager))
             {
@@ -455,15 +455,15 @@ namespace NHibernate.Caches.Redis
         /// 
         /// </summary>
         /// <param name="key"></param>
-        /// <param name="keys"></param>
+        /// <param name="values"></param>
         /// <returns></returns>
-        public bool SAdd(object key, IList keys)
+        public bool HSet(object key, IList fields, IList values)
         {
             using (var disposable = new DisposableClient(_clientManager))
             {
                 bool success = true;
                 var client = disposable.Client;
-                foreach (var k in keys)
+                foreach (var k in values)
                 {
                     success &= client.SAdd(_liveQueryCacheNamespace.GlobalCacheKey(key), client.Serialize(k)) == 1;
                 }
@@ -476,7 +476,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="key"></param>
         /// <param name="value"></param>
         /// <returns></returns>
-        public bool SRemove(object key, object value)
+        public bool HDel(object key, object field, object value)
         {
             using (var disposable = new DisposableClient(_clientManager))
             {

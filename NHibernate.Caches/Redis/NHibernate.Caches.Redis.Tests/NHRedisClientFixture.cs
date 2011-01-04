@@ -32,6 +32,7 @@ using Iesi.Collections;
 using Iesi.Collections.Generic;
 using log4net.Config;
 using NHibernate.Cache;
+using NHibernate.Cache.Query;
 using NHibernate.Engine;
 using NHibernate.Impl;
 using NHibernate.SqlCommand;
@@ -184,9 +185,9 @@ namespace NHibernate.Caches.Redis.Tests
         {
             var key = "key";
             var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
-            Assert.IsFalse(cache.SRemove("key", "value"));
-            Assert.IsTrue(cache.SAdd("key", "value"));
-            Assert.IsTrue(cache.SRemove("key","value"));
+            Assert.IsFalse(cache.HDel("key", null, "value"));
+            Assert.IsTrue(cache.HSet("key", null, "value"));
+            Assert.IsTrue(cache.HDel("key", null,"value"));
         }
 
         [Test]
@@ -194,17 +195,17 @@ namespace NHibernate.Caches.Redis.Tests
         {
             string key = "key";
             var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
-            var members = cache.SMembers(key);
+            var members = cache.HGetAll(key);
             foreach (var member in members)
             {
-                cache.SRemove(key, member);
+                cache.HDel(key, null, member);
             }
             var vals = new string[]{"value1", "value2"};
-            Assert.IsFalse(cache.SRemove(key, vals[0]));
-            Assert.IsFalse(cache.SRemove(key, vals[1]));
-            bool rc = cache.SAdd(key, vals);
-            Assert.IsTrue(cache.SRemove(key, vals[0]));
-            Assert.IsTrue(cache.SRemove(key, vals[1]));
+            Assert.IsFalse(cache.HDel(key, null, vals[0]));
+            Assert.IsFalse(cache.HDel(key, null, vals[1]));
+            bool rc = cache.HSet(key, null, vals);
+            Assert.IsTrue(cache.HDel(key, null, vals[0]));
+            Assert.IsTrue(cache.HDel(key, null, vals[1]));
         }
 
         
@@ -214,10 +215,10 @@ namespace NHibernate.Caches.Redis.Tests
             var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
 
             string key = "key";
-            var members = cache.SMembers(key);
+            var members = cache.HGetAll(key);
             foreach (var member in members)
             {
-                cache.SRemove(key, member);
+                cache.HDel(key, null, member);
             }
 
             var vals = new ArrayList()
@@ -225,9 +226,9 @@ namespace NHibernate.Caches.Redis.Tests
                                         "value1", "value2", "value3"
                                     };
             for (int i = 0; i < vals.Count; ++i)
-                cache.SAdd(key, vals[i]);
+                cache.HSet(key, null, vals[i]);
 
-            members = cache.SMembers(key);
+            members = cache.HGetAll(key);
             foreach (var member in members)
             {
                 Assert.IsTrue(vals.Contains(member));
