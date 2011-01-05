@@ -55,6 +55,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Locking\ReaderWriterLockingStrategy.cs" />
+    <Compile Include="NHRedisClientBase.cs" />
     <Compile Include="NHRedisClientNoClear.cs" />
     <Compile Include="CustomRedisClient.cs" />
     <Compile Include="CustomRedisClientFactory.cs" />

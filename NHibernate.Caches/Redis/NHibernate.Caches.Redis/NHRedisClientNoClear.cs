@@ -31,23 +31,14 @@ using NHibernate.Cache.Query;
 using ServiceStack.Redis;
 using NHibernate.Cache;
 using ServiceStack.Redis.Pipeline;
-using Environment = NHibernate.Cfg.Environment;
 
 namespace NHibernate.Caches.Redis
 {
     /// <summary>
     /// Redis cache client for Redis.
     /// </summary>
-    public class NhRedisClientNoClear : AbstractCache, ILiveQueryCache
+    public class NhRedisClientNoClear : NhRedisClientBase
     {
-        private readonly PooledRedisClientManager _clientManager;
-
-        // manage cache _region        
-        private readonly RedisNamespace _cacheNamespace;
-
-        // live query cache region
-        private readonly RedisNamespace _liveQueryCacheNamespace = new RedisNamespace(StandardQueryCache.LiveQueryCacheRegionName);
-
         static NhRedisClientNoClear()
         {
             Log = LoggerProvider.LoggerFor(typeof(NhRedisClientNoClear));
@@ -74,15 +65,8 @@ namespace NHibernate.Caches.Redis
         /// <param name="properties"></param>
         /// <param name="manager"></param>
         public NhRedisClientNoClear(string regionName, IInMemoryQueryProvider inMemoryQueryProvider, string cacheConcurrencyStrategy, IDictionary<string, string> properties, PooledRedisClientManager manager)
-            : base(regionName, inMemoryQueryProvider, cacheConcurrencyStrategy, properties)
+            : base(regionName, inMemoryQueryProvider, cacheConcurrencyStrategy, properties,manager)
         {
-            _clientManager = manager;
-
-            var namespacePrefix = _region;
-            if (_regionPrefix != null && !_regionPrefix.Equals(""))
-                namespacePrefix = _regionPrefix + "_" + _region;
-            _cacheNamespace = new RedisNamespace(namespacePrefix);
-
         }
         #region ICache Members
      /// <summary>
@@ -157,16 +141,6 @@ namespace NHibernate.Caches.Redis
             }
         }
 
-        protected string[] GlobalKeys(IEnumerable<ScratchCacheItem> scratchItems)
-        {
-            var nonNull = new List<string>();
-            foreach (var item in scratchItems)
-            {
-                if (item.PutParameters.Key != null)
-                    nonNull.Add(_cacheNamespace.GlobalCacheKey(item.PutParameters.Key));
-            }
-            return nonNull.ToArray();
-        }
         /// <summary>
         /// Puts a LockedCacheableItem corresponding to (value, version) into
         /// the cache
@@ -205,7 +179,7 @@ namespace NHibernate.Caches.Redis
                     pipe.Flush();
 
                     // check if there is are new cache items to put
-                    scratchItems = NhRedisClient.GenerateNewCacheItems(currentItemsRaw, scratchItems, client);
+                    scratchItems = GenerateNewCacheItems(currentItemsRaw, scratchItems, client);
                     if (scratchItems.Count == 0)
                         return;
 
@@ -234,7 +208,7 @@ namespace NHibernate.Caches.Redis
                         pipe.Replay();
 
                         // check if there is a new value to put
-                        scratchItems = NhRedisClient.GenerateNewCacheItems(currentItemsRaw, scratchItems, client);
+                        scratchItems = GenerateNewCacheItems(currentItemsRaw, scratchItems, client);
                         if (scratchItems.Count == 0)
                             return;
 
@@ -275,9 +249,6 @@ namespace NHibernate.Caches.Redis
                     pipe.Dispose();
             }
         }
-
-
-    
 
         /// <summary>
         /// clear cache region
@@ -321,11 +292,8 @@ namespace NHibernate.Caches.Redis
                     }
                     pipe.Flush();
                 }
-
             }
         }
-
-
 
         /// <summary>
         /// 
@@ -349,24 +317,6 @@ namespace NHibernate.Caches.Redis
             {
                 disposable.Client.Unlock(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey));
             }
-        }
-
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <returns></returns>
-        public override IDisposable GetReadLock()
-        {
-            return null;
-        }
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <returns></returns>
-        public override IDisposable GetWriteLock()
-        {
-            return null;
         }
 
         /// <summary>
@@ -412,105 +362,6 @@ namespace NHibernate.Caches.Redis
             return rc;
         }
 
-        #endregion
-
-        #region ILiveQueryCache Members
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="key"></param>
-        /// <returns></returns>
-        public IList HGetAll(object key)
-        {
-            using (var disposable = new DisposableClient(_clientManager))
-            {
-                var client = disposable.Client;
-                var members = client.SMembers(_liveQueryCacheNamespace.GlobalCacheKey(key));
-
-                var rc = new ArrayList();
-                foreach (var item in members)
-                {
-                    rc.Add(disposable.Client.Deserialize(item));
-                }
-                return rc;
-            }
-        }
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="value"></param>
-        /// <returns></returns>
-        public bool HSet(object key, object field, object value)
-        {
-            using (var disposable = new DisposableClient(_clientManager))
-            {
-                var client = disposable.Client;
-                return client.SAdd(_liveQueryCacheNamespace.GlobalCacheKey(key), client.Serialize(value)) == 1;
-            }
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="values"></param>
-        /// <returns></returns>
-        public bool HSet(object key, IList fields, IList values)
-        {
-            using (var disposable = new DisposableClient(_clientManager))
-            {
-                bool success = true;
-                var client = disposable.Client;
-                foreach (var k in values)
-                {
-                    success &= client.SAdd(_liveQueryCacheNamespace.GlobalCacheKey(key), client.Serialize(k)) == 1;
-                }
-                return success;
-            }
-        }
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="value"></param>
-        /// <returns></returns>
-        public bool HDel(object key, object field, object value)
-        {
-            using (var disposable = new DisposableClient(_clientManager))
-            {
-                var client = disposable.Client;
-                return client.SRem(_liveQueryCacheNamespace.GlobalCacheKey(key), client.Serialize(value)) == 1;
-            }
-        }
-
-        private void QueueLiveQueryUpdates(object hydratedObject, object cacheKey, IRedisQueueableOperation pipe, bool handleRemove)
-        {
-            
-            // update live query cache
-            if (!SupportsLiveQueries()) return;
-            foreach (var query in DirtyQueryKeys(hydratedObject))
-            {
-                if (query.IsDirty)
-                {
-                    DirtyQueryKey key = query;
-                    pipe.QueueCommand(
-                        r => ((IRedisNativeClient)r).SAdd(
-                                 _liveQueryCacheNamespace.GlobalCacheKey(key.Key),
-                                 ((CustomRedisClient)r).Serialize(cacheKey)));
-                }
-                else if (handleRemove)
-                {
-                    DirtyQueryKey key = query;
-                    pipe.QueueCommand(
-                        r => ((IRedisNativeClient)r).SRem(
-                                 _liveQueryCacheNamespace.GlobalCacheKey(key.Key),
-                                 ((CustomRedisClient)r).Serialize(cacheKey)));
-                }
-            }
-
-        }
         #endregion
 
         /// <summary>

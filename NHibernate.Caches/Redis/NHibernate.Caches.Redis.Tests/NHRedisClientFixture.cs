@@ -181,57 +181,65 @@ namespace NHibernate.Caches.Redis.Tests
         }
         
         [Test]
-        public void TestSAdd()
+        public void TestHSet()
         {
             var key = "key";
+            var field = "foo";
+            var value = "value";
             var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
-            Assert.IsFalse(cache.HDel("key", null, "value"));
-            Assert.IsTrue(cache.HSet("key", null, "value"));
-            Assert.IsTrue(cache.HDel("key", null,"value"));
+            Assert.IsFalse(cache.HDel(key, field));
+            Assert.IsTrue(cache.HSet(key, field, value));
+            Assert.IsTrue(cache.HDel(key, field));
         }
 
         [Test]
-        public void TestSAddMultiple()
+        public void TestHSetMultiple()
         {
-            string key = "key";
+            var key = "key";
+
             var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
             var members = cache.HGetAll(key);
-            foreach (var member in members)
+            for (int i = 0; i < members.Count; i+=2 )
             {
-                cache.HDel(key, null, member);
+                cache.HDel(key, members[i].ToString());
             }
-            var vals = new string[]{"value1", "value2"};
-            Assert.IsFalse(cache.HDel(key, null, vals[0]));
-            Assert.IsFalse(cache.HDel(key, null, vals[1]));
-            bool rc = cache.HSet(key, null, vals);
-            Assert.IsTrue(cache.HDel(key, null, vals[0]));
-            Assert.IsTrue(cache.HDel(key, null, vals[1]));
+            var fields = new[] { "field1", "field2" };
+            var vals = new[]{"value1", "value2"};
+            Assert.IsFalse(cache.HDel(key, fields[0]));
+            Assert.IsFalse(cache.HDel(key, fields[1]));
+            bool rc = cache.HSet(key, fields, vals);
+            members = cache.HGetAll(key);
+            Assert.IsTrue(cache.HDel(key, fields[0]));
+            Assert.IsTrue(cache.HDel(key, fields[1]));
         }
 
         
         [Test]
-        public void TestSMembers()
+        public void TestHGetAll()
         {
             var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
 
-            string key = "key";
+            var key = "keykey";
             var members = cache.HGetAll(key);
-            foreach (var member in members)
+            for (int i = 0; i < members.Count; i += 2)
             {
-                cache.HDel(key, null, member);
+                cache.HDel(key, members[i]);
             }
-
+            var fields = new ArrayList()
+                                    {
+                                        "field1", "field2", "field3"
+                                    };
             var vals = new ArrayList()
                                     {
                                         "value1", "value2", "value3"
                                     };
-            for (int i = 0; i < vals.Count; ++i)
-                cache.HSet(key, null, vals[i]);
+            cache.HSet(key, fields, vals);
 
             members = cache.HGetAll(key);
-            foreach (var member in members)
+            for (int i = 0; i < members.Count; i+=2 )
             {
-                Assert.IsTrue(vals.Contains(member));
+                Assert.IsTrue(fields.Contains(members[i]));
+                Assert.IsTrue(vals.Contains(members[i+1]));
             }
  
          }
