@@ -250,7 +250,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="handleRemove"></param>
         protected void QueueLiveQueryUpdates(CachePutParameters putParameters, object queryCacheable, IRedisQueueableOperation pipe, bool handleRemove)
         {
-
+            /*
             // update live query cache
             if (!SupportsLiveQueries()) return;
             foreach (var query in DirtyQueryKeys(putParameters.HydratedObject))
@@ -271,7 +271,7 @@ namespace NHibernate.Caches.Redis
                                  _liveQueryCacheNamespace.GlobalCacheKey(key.Key),
                                  ((CustomRedisClient)r).Serialize(queryCacheable)));
                 }
-            }
+            }*/
 
         }
 
