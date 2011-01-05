@@ -128,7 +128,7 @@ namespace NHibernate.Caches.Redis
                     {
                         pipe.QueueCommand(r => ((IRedisNativeClient)r).SetEx(globalKey, _expiry, client.Serialize(value)));
                      
-                        QueueLiveQueryUpdates(putParameters.HydratedObject, key, pipe, false);
+                        QueueLiveQueryUpdates(putParameters, key, pipe, false);
 
                         pipe.Flush();
                     }
@@ -199,7 +199,7 @@ namespace NHibernate.Caches.Redis
                                     _expiry, client.Serialize(item.NewCacheValue) ));
 
                             // update live query cache
-                            QueueLiveQueryUpdates(scratch.PutParameters.HydratedObject, scratch.PutParameters.Key, trans, true);
+                            QueueLiveQueryUpdates(scratch.PutParameters, scratch.PutParameters.Key, trans, true);
                         }
                         success = trans.Commit();
                     }

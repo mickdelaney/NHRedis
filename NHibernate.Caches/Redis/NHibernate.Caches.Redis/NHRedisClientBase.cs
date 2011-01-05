@@ -37,7 +37,8 @@ using Environment = NHibernate.Cfg.Environment;
 namespace NHibernate.Caches.Redis
 {
     /// <summary>
-    /// Redis cache client for Redis.
+    /// base class for Redis cache client. Handles functionality shared between NHRedisClient
+    /// and NHRedisClientNoClear, such as namespace management, and live query methods.
     /// </summary>
     public abstract class NhRedisClientBase : AbstractCache, ILiveQueryCache
     {
@@ -188,6 +189,7 @@ namespace NHibernate.Caches.Redis
         /// 
         /// </summary>
         /// <param name="key"></param>
+        /// <param name="field"></param>
         /// <param name="value"></param>
         /// <returns></returns>
         public bool HSet(object key, object field, object value)
@@ -203,6 +205,7 @@ namespace NHibernate.Caches.Redis
         /// 
         /// </summary>
         /// <param name="key"></param>
+        /// <param name="fields"></param>
         /// <param name="values"></param>
         /// <returns></returns>
         public bool HSet(object key, IList fields, IList values)
@@ -228,11 +231,12 @@ namespace NHibernate.Caches.Redis
 
             }
         }
+        
         /// <summary>
         /// 
         /// </summary>
         /// <param name="key"></param>
-        /// <param name="value"></param>
+        /// <param name="field"></param>
         /// <returns></returns>
         public bool HDel(object key, object field)
         {
@@ -243,29 +247,35 @@ namespace NHibernate.Caches.Redis
             }
         }
         #endregion
-
-        protected void QueueLiveQueryUpdates(object hydratedObject, object cacheKey, IRedisQueueableOperation pipe, bool handleRemove)
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="putParameters"></param>
+        /// <param name="queryCacheable"></param>
+        /// <param name="pipe"></param>
+        /// <param name="handleRemove"></param>
+        protected void QueueLiveQueryUpdates(CachePutParameters putParameters, object queryCacheable, IRedisQueueableOperation pipe, bool handleRemove)
         {
 
             // update live query cache
             if (!SupportsLiveQueries()) return;
-            foreach (var query in DirtyQueryKeys(hydratedObject))
+            foreach (var query in DirtyQueryKeys(putParameters.HydratedObject))
             {
                 if (query.IsDirty)
                 {
-                    DirtyQueryKey key = query;
+                    var key = query;
                     pipe.QueueCommand(
                         r => ((IRedisNativeClient)r).SAdd(
                                  _liveQueryCacheNamespace.GlobalCacheKey(key.Key),
-                                 ((CustomRedisClient)r).Serialize(cacheKey)));
+                                 ((CustomRedisClient)r).Serialize(queryCacheable)));
                 }
                 else if (handleRemove)
                 {
-                    DirtyQueryKey key = query;
+                    var key = query;
                     pipe.QueueCommand(
                         r => ((IRedisNativeClient)r).SRem(
                                  _liveQueryCacheNamespace.GlobalCacheKey(key.Key),
-                                 ((CustomRedisClient)r).Serialize(cacheKey)));
+                                 ((CustomRedisClient)r).Serialize(queryCacheable)));
                 }
             }
 
