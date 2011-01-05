@@ -169,18 +169,18 @@ namespace NHibernate.Caches.Redis
         /// </summary>
         /// <param name="key"></param>
         /// <returns></returns>
-        public IList HGetAll(object key)
+        public IDictionary HGetAll(object key)
         {
             using (var disposable = new DisposableClient(_clientManager))
             {
                 var client = disposable.Client;
                 var members = client.HGetAll(_liveQueryCacheNamespace.GlobalCacheKey(key));
 
-                var rc = new ArrayList();
+                var rc = new Hashtable();
+                int len = members.Length;
                 for (int i = 0; i < members.Length; i+=2 )
                 {
-                    rc.Add(encoding.GetString(members[i]));
-                    rc.Add(disposable.Client.Deserialize(members[i+1]));
+                    rc[encoding.GetString(members[i])] = disposable.Client.Deserialize(members[i+1]);
                 }
                 return rc;
             }
@@ -192,12 +192,12 @@ namespace NHibernate.Caches.Redis
         /// <param name="field"></param>
         /// <param name="value"></param>
         /// <returns></returns>
-        public bool HSet(object key, object field, object value)
+        public void HSet(object key, object field, object value)
         {
             using (var disposable = new DisposableClient(_clientManager))
             {
                 var client = disposable.Client;
-                return client.HSet(_liveQueryCacheNamespace.GlobalCacheKey(key), encoding.GetBytes(field.ToString()), client.Serialize(value)) == 1;
+                client.HSet(_liveQueryCacheNamespace.GlobalCacheKey(key), encoding.GetBytes(field.ToString()), client.Serialize(value));
             }
         }
 
@@ -208,7 +208,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="fields"></param>
         /// <param name="values"></param>
         /// <returns></returns>
-        public bool HSet(object key, IList fields, IList values)
+        public void HSet(object key, IList fields, IList values)
         {
             using (var disposable = new DisposableClient(_clientManager))
             {
@@ -227,7 +227,6 @@ namespace NHibernate.Caches.Redis
 
                 }
                 client.HMSet(_liveQueryCacheNamespace.GlobalCacheKey(key), fieldBytes, valueBytes);
-                return true;
 
             }
         }

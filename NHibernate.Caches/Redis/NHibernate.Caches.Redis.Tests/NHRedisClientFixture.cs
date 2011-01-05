@@ -188,7 +188,7 @@ namespace NHibernate.Caches.Redis.Tests
             var value = "value";
             var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
             Assert.IsFalse(cache.HDel(key, field));
-            Assert.IsTrue(cache.HSet(key, field, value));
+            cache.HSet(key, field, value);
             Assert.IsTrue(cache.HDel(key, field));
         }
 
@@ -207,7 +207,7 @@ namespace NHibernate.Caches.Redis.Tests
             var vals = new[]{"value1", "value2"};
             Assert.IsFalse(cache.HDel(key, fields[0]));
             Assert.IsFalse(cache.HDel(key, fields[1]));
-            bool rc = cache.HSet(key, fields, vals);
+            cache.HSet(key, fields, vals);
             members = cache.HGetAll(key);
             Assert.IsTrue(cache.HDel(key, fields[0]));
             Assert.IsTrue(cache.HDel(key, fields[1]));
@@ -221,10 +221,11 @@ namespace NHibernate.Caches.Redis.Tests
 
             var key = "keykey";
             var members = cache.HGetAll(key);
-            for (int i = 0; i < members.Count; i += 2)
+            foreach (DictionaryEntry member in members)
             {
-                cache.HDel(key, members[i]);
+                cache.HDel(key, member.Key);
             }
+
             var fields = new ArrayList()
                                     {
                                         "field1", "field2", "field3"
@@ -236,12 +237,11 @@ namespace NHibernate.Caches.Redis.Tests
             cache.HSet(key, fields, vals);
 
             members = cache.HGetAll(key);
-            for (int i = 0; i < members.Count; i+=2 )
+            foreach (DictionaryEntry member in members)
             {
-                Assert.IsTrue(fields.Contains(members[i]));
-                Assert.IsTrue(vals.Contains(members[i+1]));
+                Assert.IsTrue(fields.Contains(member.Key));
+                Assert.IsTrue(vals.Contains(member.Value)); 
             }
- 
          }
 
 	    [Test]
