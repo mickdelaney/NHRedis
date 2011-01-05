@@ -102,7 +102,7 @@ namespace NHibernate.Caches.Redis
         {
             var rc = Sanitize(key);
             if (_namespacePrefix != null && !_namespacePrefix.Equals(""))
-                rc = _namespacePrefix + "_" + GetGeneration().ToString() + NamespaceKeySeparator + rc;
+                rc = _namespacePrefix + "_" + GetGeneration() + NamespaceKeySeparator + rc;
             for (int i = 0; i < numUniquePrefixes; ++i)
                 rc += KeyTag;
             return rc;

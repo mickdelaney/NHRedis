@@ -28,6 +28,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
+using NHibernate.Cache.Entry;
 using NHibernate.Cache.Query;
 using ServiceStack.Redis;
 using NHibernate.Cache;
@@ -169,18 +170,17 @@ namespace NHibernate.Caches.Redis
         /// </summary>
         /// <param name="key"></param>
         /// <returns></returns>
-        public IDictionary HGetAll(object key)
+        public IDictionary<object, LiveQueryCacheEntry> HGetAll(object key)
         {
             using (var disposable = new DisposableClient(_clientManager))
             {
                 var client = disposable.Client;
                 var members = client.HGetAll(_liveQueryCacheNamespace.GlobalCacheKey(key));
 
-                var rc = new Hashtable();
-                int len = members.Length;
+                var rc = new Dictionary<object, LiveQueryCacheEntry>();
                 for (int i = 0; i < members.Length; i+=2 )
                 {
-                    rc[encoding.GetString(members[i])] = disposable.Client.Deserialize(members[i+1]);
+                    rc[encoding.GetString(members[i])] = disposable.Client.Deserialize(members[i+1]) as LiveQueryCacheEntry;
                 }
                 return rc;
             }
@@ -192,7 +192,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="field"></param>
         /// <param name="value"></param>
         /// <returns></returns>
-        public void HSet(object key, object field, object value)
+        public void HSet(object key, object field, LiveQueryCacheEntry value)
         {
             using (var disposable = new DisposableClient(_clientManager))
             {
@@ -205,26 +205,21 @@ namespace NHibernate.Caches.Redis
         /// 
         /// </summary>
         /// <param name="key"></param>
-        /// <param name="fields"></param>
-        /// <param name="values"></param>
-        /// <returns></returns>
-        public void HSet(object key, IList fields, IList values)
+        /// <param name="keyValues"></param>
+        public void HSet(object key, IDictionary<object, LiveQueryCacheEntry> keyValues)
         {
             using (var disposable = new DisposableClient(_clientManager))
             {
                 var client = disposable.Client;
-                var fieldBytes = new byte[fields.Count][];
-               
-                for (int i = 0; i < fields.Count; ++i)
+                var fieldBytes = new byte[keyValues.Count][];
+                var valueBytes = new byte[keyValues.Count][];
+                var i = 0;
+                foreach (var kv in keyValues)
                 {
-                    fieldBytes[i] = encoding.GetBytes(fields[i].ToString());
-
-                }
-                var valueBytes = new byte[values.Count][];
-                for (int i = 0; i < values.Count; ++i)
-                {
-                    valueBytes[i] = client.Serialize(values[i]);
-
+                    fieldBytes[i] = encoding.GetBytes(kv.Key.ToString());
+                    valueBytes[i] = client.Serialize(kv.Value);
+                    i++;
+  
                 }
                 client.HMSet(_liveQueryCacheNamespace.GlobalCacheKey(key), fieldBytes, valueBytes);
 

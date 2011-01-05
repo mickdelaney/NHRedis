@@ -32,6 +32,7 @@ using Iesi.Collections;
 using Iesi.Collections.Generic;
 using log4net.Config;
 using NHibernate.Cache;
+using NHibernate.Cache.Entry;
 using NHibernate.Cache.Query;
 using NHibernate.Engine;
 using NHibernate.Impl;
@@ -185,7 +186,7 @@ namespace NHibernate.Caches.Redis.Tests
         {
             var key = "key";
             var field = "foo";
-            var value = "value";
+            var value = new LiveQueryCacheEntry("value",1,null);
             var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
             Assert.IsFalse(cache.HDel(key, field));
             cache.HSet(key, field, value);
@@ -203,14 +204,21 @@ namespace NHibernate.Caches.Redis.Tests
             {
                 cache.HDel(key, members[i].ToString());
             }
-            var fields = new[] { "field1", "field2" };
-            var vals = new[]{"value1", "value2"};
-            Assert.IsFalse(cache.HDel(key, fields[0]));
-            Assert.IsFalse(cache.HDel(key, fields[1]));
-            cache.HSet(key, fields, vals);
+
+            var keyValues = new Dictionary<object, LiveQueryCacheEntry>();
+            keyValues["field1"] = new LiveQueryCacheEntry("value1", 1, null);
+            keyValues["field2"] = new LiveQueryCacheEntry("value2", 1, null);
+            foreach (var entry in keyValues)
+            {
+                Assert.IsFalse(cache.HDel(key, entry.Key));
+            }
+
+            cache.HSet(key, keyValues);
             members = cache.HGetAll(key);
-            Assert.IsTrue(cache.HDel(key, fields[0]));
-            Assert.IsTrue(cache.HDel(key, fields[1]));
+            foreach (var entry in keyValues)
+            {
+                Assert.IsTrue(cache.HDel(key, entry.Key));
+            }
         }
 
         
@@ -221,26 +229,30 @@ namespace NHibernate.Caches.Redis.Tests
 
             var key = "keykey";
             var members = cache.HGetAll(key);
-            foreach (DictionaryEntry member in members)
+            foreach (var member in members)
             {
                 cache.HDel(key, member.Key);
             }
 
+            var keyValues = new Dictionary<object, LiveQueryCacheEntry>();
+            keyValues["field1"] = new LiveQueryCacheEntry("value1", 1, null);
+            keyValues["field2"] = new LiveQueryCacheEntry("value2", 1, null);
+            cache.HSet(key, keyValues);
+
+            members = cache.HGetAll(key);
+
             var fields = new ArrayList()
                                     {
-                                        "field1", "field2", "field3"
+                                        "field1", "field2"
                                     };
             var vals = new ArrayList()
                                     {
-                                        "value1", "value2", "value3"
+                                        "value1", "value2"
                                     };
-            cache.HSet(key, fields, vals);
-
-            members = cache.HGetAll(key);
-            foreach (DictionaryEntry member in members)
+            foreach (var member in members)
             {
                 Assert.IsTrue(fields.Contains(member.Key));
-                Assert.IsTrue(vals.Contains(member.Value)); 
+                Assert.IsTrue(vals.Contains(member.Value.Value)); 
             }
          }
 
