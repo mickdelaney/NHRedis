@@ -84,10 +84,10 @@ namespace NHibernate.Caches.Redis
             object rc;
             try
             {
-                using (var disposable = new DisposableClient(_clientManager))
+                using (var disposable = new DisposableClient(ClientManager))
                 {
                     var client = disposable.Client;
-                    var maybeObj = client.Get(_cacheNamespace.GlobalCacheKey(key));
+                    var maybeObj = client.Get(CacheNamespace.GlobalCacheKey(key));
                     rc = (maybeObj == null) ? null : client.Deserialize(maybeObj);
                 }
             }
@@ -119,10 +119,10 @@ namespace NHibernate.Caches.Redis
  
             try
             {
-                using (var disposable = new DisposableClient(_clientManager))
+                using (var disposable = new DisposableClient(ClientManager))
                 {
                     var client = disposable.Client;
-                    var globalKey = _cacheNamespace.GlobalCacheKey(key);
+                    var globalKey = CacheNamespace.GlobalCacheKey(key);
 
                     using (var pipe = client.CreatePipeline())
                     {
@@ -163,7 +163,7 @@ namespace NHibernate.Caches.Redis
             IRedisPipeline pipe = null;
             try
             {
-                using (var disposable = new DisposableClient(_clientManager))
+                using (var disposable = new DisposableClient(ClientManager))
                 {
                     var client = disposable.Client;
 
@@ -195,7 +195,7 @@ namespace NHibernate.Caches.Redis
                             ScratchCacheItem item = scratch;
                             trans.QueueCommand(
                                 r => ((IRedisNativeClient) r).SetEx(
-                                    _cacheNamespace.GlobalCacheKey(item.PutParameters.Key),
+                                    CacheNamespace.GlobalCacheKey(item.PutParameters.Key),
                                     _expiry, client.Serialize(item.NewCacheValue) ));
 
                             // update live query cache
@@ -223,7 +223,7 @@ namespace NHibernate.Caches.Redis
                                 trans.QueueCommand(
                                     r =>
                                     ((IRedisNativeClient)r).SetEx(
-                                        _cacheNamespace.GlobalCacheKey(item.PutParameters.Key),
+                                        CacheNamespace.GlobalCacheKey(item.PutParameters.Key),
                                         _expiry, client.Serialize(item.NewCacheValue) ));
                             }
 
@@ -270,13 +270,13 @@ namespace NHibernate.Caches.Redis
             if (Log.IsDebugEnabled)
                 Log.DebugFormat("removing item {0}", key);
 
-            using (var disposable = new DisposableClient(_clientManager))
+            using (var disposable = new DisposableClient(ClientManager))
             {
                 var client = disposable.Client;
                 using (var pipe = client.CreatePipeline())
                 {
                       //watch for changes to cache keys
-                    pipe.QueueCommand(r => ((RedisNativeClient)r).Del(_cacheNamespace.GlobalCacheKey(key)));
+                    pipe.QueueCommand(r => ((RedisNativeClient)r).Del(CacheNamespace.GlobalCacheKey(key)));
 
                     //remove object from all live query sets
                     if (SupportsLiveQueries())
@@ -286,7 +286,7 @@ namespace NHibernate.Caches.Redis
                             QueryKey queryKey = liveQueryKey;
                             pipe.QueueCommand(
                                 r =>
-                                ((RedisNativeClient) r).SRem(_liveQueryCacheNamespace.GlobalCacheKey(queryKey),
+                                ((RedisNativeClient) r).SRem(LiveQueryCacheNamespace.GlobalCacheKey(queryKey),
                                                              client.Serialize(key)));
                         }
                     }
@@ -301,9 +301,9 @@ namespace NHibernate.Caches.Redis
         /// <param name="key"></param>
         public override void Lock(object key)
         {
-            using (var disposable = new DisposableClient(_clientManager))
+            using (var disposable = new DisposableClient(ClientManager))
             {
-                disposable.Client.Lock(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey));
+                disposable.Client.Lock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey));
             }
         }
 
@@ -313,9 +313,9 @@ namespace NHibernate.Caches.Redis
         /// <param name="key"></param>
         public override void Unlock(object key)
         {
-            using (var disposable = new DisposableClient(_clientManager))
+            using (var disposable = new DisposableClient(ClientManager))
             {
-                disposable.Client.Unlock(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey));
+                disposable.Client.Unlock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey));
             }
         }
 
@@ -327,7 +327,7 @@ namespace NHibernate.Caches.Redis
         public override IDictionary MultiGet(IEnumerable keys)
         {
             var rc = new Dictionary<object, object>();
-            using (var disposable = new DisposableClient(_clientManager))
+            using (var disposable = new DisposableClient(ClientManager))
             {
                 var client = disposable.Client;
                 var globalKeys = new List<string>();
@@ -337,7 +337,7 @@ namespace NHibernate.Caches.Redis
                 foreach (var key in keys)
                 {
                     keyCount++;
-                    globalKeys.Add(_cacheNamespace.GlobalCacheKey(key));
+                    globalKeys.Add(CacheNamespace.GlobalCacheKey(key));
                 }
                 // do multi get
                 var resultBytesArray = client.MGet(globalKeys.ToArray());

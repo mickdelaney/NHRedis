@@ -43,15 +43,16 @@ namespace NHibernate.Caches.Redis
     /// </summary>
     public abstract class NhRedisClientBase : AbstractCache, ILiveQueryCache
     {
-        protected readonly PooledRedisClientManager _clientManager;
+        protected readonly PooledRedisClientManager ClientManager;
 
         // manage cache _region        
-        protected readonly RedisNamespace _cacheNamespace;
+        protected readonly RedisNamespace CacheNamespace;
 
         // live query cache region
-        protected readonly RedisNamespace _liveQueryCacheNamespace = new RedisNamespace(StandardQueryCache.LiveQueryCacheRegionName);
+        protected readonly RedisNamespace LiveQueryCacheNamespace = new RedisNamespace(StandardQueryCache.LiveQueryCacheRegionName);
+        protected readonly RedisNamespace LiveQueriesNamespace = new RedisNamespace(StandardQueryCache.LiveQueriesRegionName);
 
-        protected readonly UTF8Encoding encoding = new UTF8Encoding();
+        protected readonly UTF8Encoding Encoding = new UTF8Encoding();
 
         static NhRedisClientBase()
         {
@@ -81,12 +82,12 @@ namespace NHibernate.Caches.Redis
         public NhRedisClientBase(string regionName, IInMemoryQueryProvider inMemoryQueryProvider, string cacheConcurrencyStrategy, IDictionary<string, string> properties, PooledRedisClientManager manager)
             : base(regionName, inMemoryQueryProvider, cacheConcurrencyStrategy, properties)
         {
-            _clientManager = manager;
+            ClientManager = manager;
 
             var namespacePrefix = _region;
             if (_regionPrefix != null && !_regionPrefix.Equals(""))
                 namespacePrefix = _regionPrefix + "_" + _region;
-            _cacheNamespace = new RedisNamespace(namespacePrefix);
+            CacheNamespace = new RedisNamespace(namespacePrefix);
 
         }
  
@@ -140,7 +141,7 @@ namespace NHibernate.Caches.Redis
             foreach (var item in scratchItems)
             {
                 if (item.PutParameters.Key != null)
-                    nonNull.Add(_cacheNamespace.GlobalCacheKey(item.PutParameters.Key));
+                    nonNull.Add(CacheNamespace.GlobalCacheKey(item.PutParameters.Key));
             }
             return nonNull.ToArray();
         }
@@ -165,6 +166,21 @@ namespace NHibernate.Caches.Redis
 
         #region ILiveQueryCache Members
 
+        public void HSet(object key, object field, IInMemoryQuery value)
+        {
+            HSetImpl(key,field, value, LiveQueriesNamespace);
+        }
+
+        public bool HDelLiveQuery(object key, object field)
+        {
+            return HDelImpl(key, field, LiveQueriesNamespace);
+        }
+
+        public IDictionary<object, IInMemoryQuery> HGetAllLiveQueries(object key)
+        {
+            return HGetAllImpl<IInMemoryQuery>(key, LiveQueriesNamespace);
+        }
+
         /// <summary>
         /// 
         /// </summary>
@@ -172,19 +188,10 @@ namespace NHibernate.Caches.Redis
         /// <returns></returns>
         public IDictionary<object, LiveQueryCacheEntry> HGetAll(object key)
         {
-            using (var disposable = new DisposableClient(_clientManager))
-            {
-                var client = disposable.Client;
-                var members = client.HGetAll(_liveQueryCacheNamespace.GlobalCacheKey(key));
-
-                var rc = new Dictionary<object, LiveQueryCacheEntry>();
-                for (int i = 0; i < members.Length; i+=2 )
-                {
-                    rc[encoding.GetString(members[i])] = disposable.Client.Deserialize(members[i+1]) as LiveQueryCacheEntry;
-                }
-                return rc;
-            }
+            return HGetAllImpl<LiveQueryCacheEntry>(key, LiveQueryCacheNamespace);
         }
+
+
         /// <summary>
         /// 
         /// </summary>
@@ -194,11 +201,7 @@ namespace NHibernate.Caches.Redis
         /// <returns></returns>
         public void HSet(object key, object field, LiveQueryCacheEntry value)
         {
-            using (var disposable = new DisposableClient(_clientManager))
-            {
-                var client = disposable.Client;
-                client.HSet(_liveQueryCacheNamespace.GlobalCacheKey(key), encoding.GetBytes(field.ToString()), client.Serialize(value));
-            }
+           HSetImpl(key, field, value, LiveQueryCacheNamespace);
         }
 
         /// <summary>
@@ -208,22 +211,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="keyValues"></param>
         public void HSet(object key, IDictionary<object, LiveQueryCacheEntry> keyValues)
         {
-            using (var disposable = new DisposableClient(_clientManager))
-            {
-                var client = disposable.Client;
-                var fieldBytes = new byte[keyValues.Count][];
-                var valueBytes = new byte[keyValues.Count][];
-                var i = 0;
-                foreach (var kv in keyValues)
-                {
-                    fieldBytes[i] = encoding.GetBytes(kv.Key.ToString());
-                    valueBytes[i] = client.Serialize(kv.Value);
-                    i++;
-  
-                }
-                client.HMSet(_liveQueryCacheNamespace.GlobalCacheKey(key), fieldBytes, valueBytes);
-
-            }
+            HSetImpl(key, keyValues, LiveQueryCacheNamespace);
         }
         
         /// <summary>
@@ -234,13 +222,100 @@ namespace NHibernate.Caches.Redis
         /// <returns></returns>
         public bool HDel(object key, object field)
         {
-            using (var disposable = new DisposableClient(_clientManager))
-            {
-                var client = disposable.Client;
-                return client.HDel(_liveQueryCacheNamespace.GlobalCacheKey(key), encoding.GetBytes(field.ToString())) == 1;
-            }
+            return HDelImpl(key, field, LiveQueryCacheNamespace);
         }
         #endregion
+
+
+        #region Implementation
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="key"></param>
+        /// <param name="redisNamespace"></param>
+        /// <returns></returns>
+        private IDictionary<object, T> HGetAllImpl<T>(object key, RedisNamespace redisNamespace)
+        {
+            using (var disposable = new DisposableClient(ClientManager))
+            {
+                var client = disposable.Client;
+                var members = client.HGetAll(redisNamespace.GlobalCacheKey(key));
+
+                var rc = new Dictionary<object, T>();
+                for (var i = 0; i < members.Length; i += 2)
+                {
+                    var temp = disposable.Client.Deserialize(members[i + 1]);
+                    if (temp is T)
+                       rc[Encoding.GetString(members[i])] = (T)disposable.Client.Deserialize(members[i + 1]);
+                }
+                return rc;
+            }
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="key"></param>
+        /// <param name="field"></param>
+        /// <param name="value"></param>
+        /// <param name="redisNamespace"></param>
+        private void HSetImpl(object key, object field, object value, RedisNamespace redisNamespace)
+        {
+            using (var disposable = new DisposableClient(ClientManager))
+            {
+                var client = disposable.Client;
+                client.HSet(redisNamespace.GlobalCacheKey(key), Encoding.GetBytes(field.ToString()), client.Serialize(value));
+            }
+        }
+
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="key"></param>
+        /// <param name="keyValues"></param>
+        /// <param name="redisNamespace"></param>
+        private void HSetImpl<T>(object key, IDictionary<object, T> keyValues, RedisNamespace redisNamespace)
+        {
+            using (var disposable = new DisposableClient(ClientManager))
+            {
+                var client = disposable.Client;
+                var fieldBytes = new byte[keyValues.Count][];
+                var valueBytes = new byte[keyValues.Count][];
+                var i = 0;
+                foreach (var kv in keyValues)
+                {
+                    fieldBytes[i] = Encoding.GetBytes(kv.Key.ToString());
+                    valueBytes[i] = client.Serialize(kv.Value);
+                    i++;
+
+                }
+                client.HMSet(redisNamespace.GlobalCacheKey(key), fieldBytes, valueBytes);
+
+            }
+        }
+
+
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="key"></param>
+        /// <param name="field"></param>
+        /// <param name="redisNamespace"></param>
+        /// <returns></returns>
+        private bool HDelImpl(object key, object field, RedisNamespace redisNamespace)
+        {
+            using (var disposable = new DisposableClient(ClientManager))
+            {
+                var client = disposable.Client;
+                return client.HDel(redisNamespace.GlobalCacheKey(key), Encoding.GetBytes(field.ToString())) == 1;
+            }
+        }
+
+        #endregion
+
         /// <summary>
         /// 
         /// </summary>
@@ -274,7 +349,6 @@ namespace NHibernate.Caches.Redis
             }*/
 
         }
-
 
         /// <summary>
         /// 

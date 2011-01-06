@@ -41,7 +41,6 @@ namespace NHibernate.Caches.Redis
         private readonly string _globalKeysKey;
 
         // key for list of keys slated for garbage collection
-        // (having two flanking uniqueifiers guarantees uniqueness for this key)
         public const string NamespacesGarbageKey = ReservedTag + "NHREDIS_NAMESPACES_GARBAGE";
 
         public const int NumTagsForKey = 0;
