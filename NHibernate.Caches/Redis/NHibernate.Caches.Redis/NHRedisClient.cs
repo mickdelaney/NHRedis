@@ -228,7 +228,7 @@ namespace NHibernate.Caches.Redis
                     pipe.QueueCommand(r => ((RedisClient)r).Watch(WatchKeys(items, true)));
 
                     //get all of the current objects
-                    pipe.QueueCommand(r => ((RedisNativeClient)r).MGet(WatchKeys(items, false)), x => currentItemsRaw = x);
+                    pipe.QueueCommand(r => ((RedisNativeClient)r).MGet(Keys(items, false)), x => currentItemsRaw = x);
 
                     pipe.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()), x => generationFromServer = Convert.ToInt64(x));
                     pipe.Flush();

@@ -137,27 +137,46 @@ namespace NHibernate.Caches.Redis
             }
             return puttableScratchItems;
         }
-         
-        protected string[] WatchKeys(IEnumerable<ScratchCacheItem> scratchItems)
-        {
-            return WatchKeys(scratchItems, false);
-        }
 
         protected string[] WatchKeys(IEnumerable<ScratchCacheItem> scratchItems, bool includeGenerationKey)
         {
-            var watchKeys = new List<string>
-                              {
-                                  _liveQueriesNamespace.GlobalCacheKey(LiveQueriesKey), 
-                                  _liveQueriesNamespace.GlobalCacheKey(PendingLiveQueriesKey)
-                              };
+            var keys = Keys(scratchItems, includeGenerationKey);
+            return AddWatchKeys(ref keys);
+        }
+
+        protected string[] WatchKeys(IEnumerable<ScratchCacheItem> scratchItems)
+        {
+            var keys = Keys(scratchItems);
+            return AddWatchKeys(ref keys);
+        }
+        private string[] AddWatchKeys(ref string[] keys)
+        {
+            Array.Resize(ref keys, keys.Length + 2);
+
+            keys[keys.Length - 2] = _liveQueriesNamespace.GlobalCacheKey(LiveQueriesKey);
+            keys[keys.Length - 1] = _liveQueriesNamespace.GlobalCacheKey(PendingLiveQueriesKey);
+
+            return keys; 
+        }
+
+ 
+        protected string[] Keys(IEnumerable<ScratchCacheItem> scratchItems)
+        {
+            return Keys(scratchItems, false);
+        }
+
+        protected string[] Keys(IEnumerable<ScratchCacheItem> scratchItems, bool includeGenerationKey)
+        {
+            var globalKeys = new List<string>();
+                            
             if (includeGenerationKey)
-                watchKeys.Add(CacheNamespace.GetGenerationKey());
+                globalKeys.Add(CacheNamespace.GetGenerationKey());
             foreach (var item in scratchItems)
             {
                 if (item.PutParameters.Key != null)
-                    watchKeys.Add(CacheNamespace.GlobalCacheKey(item.PutParameters.Key));
+                    globalKeys.Add(CacheNamespace.GlobalCacheKey(item.PutParameters.Key));
             }
-            return watchKeys.ToArray();
+            return globalKeys.ToArray();
         }
 
 
@@ -242,6 +261,25 @@ namespace NHibernate.Caches.Redis
 
 
         #region Implementation
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="key"></param>
+        /// <param name="client"></param>
+        /// <param name="pipe"></param>
+        protected void QueueDeleteAll(object key, CustomRedisClient client, IRedisQueueableOperation pipe)
+        {
+            //remove object from all live query hashes
+            if (!SupportsLiveQueries()) return;
+            foreach (var liveQueryKey in _inMemoryQueryProvider.GetQueries().Keys)
+            {
+                QueryKey queryKey = liveQueryKey;
+                pipe.QueueCommand(r =>  
+                    ((RedisNativeClient)r).HDel(_liveQueryCacheNamespace.GlobalCacheKey(queryKey),client.Serialize(key)));
+            }
+        }
+
         /// <summary>
         /// 
         /// </summary>
