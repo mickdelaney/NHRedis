@@ -49,8 +49,11 @@ namespace NHibernate.Caches.Redis
         protected readonly RedisNamespace CacheNamespace;
 
         // live query cache region
-        protected readonly RedisNamespace LiveQueryCacheNamespace = new RedisNamespace(StandardQueryCache.LiveQueryCacheRegionName);
-        protected readonly RedisNamespace LiveQueriesNamespace = new RedisNamespace(StandardQueryCache.LiveQueriesRegionName);
+        private readonly RedisNamespace _liveQueryCacheNamespace = new RedisNamespace(StandardQueryCache.LiveQueryCacheRegionName);
+        private readonly RedisNamespace _liveQueriesNamespace = new RedisNamespace(StandardQueryCache.LiveQueriesRegionName);
+
+        protected const string LiveQueriesKey = "LiveQueriesKey";
+        protected const string PendingLiveQueriesKey = "PendingLiveQueriesKey";
 
         protected readonly UTF8Encoding Encoding = new UTF8Encoding();
 
@@ -135,17 +138,28 @@ namespace NHibernate.Caches.Redis
             return puttableScratchItems;
         }
          
-        protected string[] GlobalKeys(IEnumerable<ScratchCacheItem> scratchItems)
+        protected string[] WatchKeys(IEnumerable<ScratchCacheItem> scratchItems)
         {
-            var nonNull = new List<string>();
+            return WatchKeys(scratchItems, false);
+        }
+
+        protected string[] WatchKeys(IEnumerable<ScratchCacheItem> scratchItems, bool includeGenerationKey)
+        {
+            var watchKeys = new List<string>
+                              {
+                                  _liveQueriesNamespace.GlobalCacheKey(LiveQueriesKey), 
+                                  _liveQueriesNamespace.GlobalCacheKey(PendingLiveQueriesKey)
+                              };
+            if (includeGenerationKey)
+                watchKeys.Add(CacheNamespace.GetGenerationKey());
             foreach (var item in scratchItems)
             {
                 if (item.PutParameters.Key != null)
-                    nonNull.Add(CacheNamespace.GlobalCacheKey(item.PutParameters.Key));
+                    watchKeys.Add(CacheNamespace.GlobalCacheKey(item.PutParameters.Key));
             }
-            return nonNull.ToArray();
+            return watchKeys.ToArray();
         }
- 
+
 
         /// <summary>
         /// 
@@ -168,17 +182,17 @@ namespace NHibernate.Caches.Redis
 
         public void HSet(object key, object field, IInMemoryQuery value)
         {
-            HSetImpl(key,field, value, LiveQueriesNamespace);
+            HSetImpl(key,field, value, _liveQueriesNamespace);
         }
 
         public bool HDelLiveQuery(object key, object field)
         {
-            return HDelImpl(key, field, LiveQueriesNamespace);
+            return HDelImpl(key, field, _liveQueriesNamespace);
         }
 
         public IDictionary<object, IInMemoryQuery> HGetAllLiveQueries(object key)
         {
-            return HGetAllImpl<IInMemoryQuery>(key, LiveQueriesNamespace);
+            return HGetAllImpl<IInMemoryQuery>(key, _liveQueriesNamespace);
         }
 
         /// <summary>
@@ -188,7 +202,7 @@ namespace NHibernate.Caches.Redis
         /// <returns></returns>
         public IDictionary<object, LiveQueryCacheEntry> HGetAll(object key)
         {
-            return HGetAllImpl<LiveQueryCacheEntry>(key, LiveQueryCacheNamespace);
+            return HGetAllImpl<LiveQueryCacheEntry>(key, _liveQueryCacheNamespace);
         }
 
 
@@ -201,7 +215,7 @@ namespace NHibernate.Caches.Redis
         /// <returns></returns>
         public void HSet(object key, object field, LiveQueryCacheEntry value)
         {
-           HSetImpl(key, field, value, LiveQueryCacheNamespace);
+           HSetImpl(key, field, value, _liveQueryCacheNamespace);
         }
 
         /// <summary>
@@ -211,7 +225,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="keyValues"></param>
         public void HSet(object key, IDictionary<object, LiveQueryCacheEntry> keyValues)
         {
-            HSetImpl(key, keyValues, LiveQueryCacheNamespace);
+            HSetImpl(key, keyValues, _liveQueryCacheNamespace);
         }
         
         /// <summary>
@@ -222,7 +236,7 @@ namespace NHibernate.Caches.Redis
         /// <returns></returns>
         public bool HDel(object key, object field)
         {
-            return HDelImpl(key, field, LiveQueryCacheNamespace);
+            return HDelImpl(key, field, _liveQueryCacheNamespace);
         }
         #endregion
 

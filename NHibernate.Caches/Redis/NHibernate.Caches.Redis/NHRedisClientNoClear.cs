@@ -171,10 +171,10 @@ namespace NHibernate.Caches.Redis
 
                     //watch for changes to cache keys
                     IList<ScratchCacheItem> items = scratchItems;
-                    pipe.QueueCommand(r => ((RedisClient)r).Watch(GlobalKeys(items)));
+                    pipe.QueueCommand(r => ((RedisClient)r).Watch(WatchKeys(items)));
 
                     //get all of the current objects
-                    pipe.QueueCommand(r => ((RedisNativeClient)r).MGet(GlobalKeys(items)), x => currentItemsRaw = x);
+                    pipe.QueueCommand(r => ((RedisNativeClient)r).MGet(WatchKeys(items)), x => currentItemsRaw = x);
 
                     pipe.Flush();
 
@@ -278,6 +278,7 @@ namespace NHibernate.Caches.Redis
                       //watch for changes to cache keys
                     pipe.QueueCommand(r => ((RedisNativeClient)r).Del(CacheNamespace.GlobalCacheKey(key)));
 
+                    /*
                     //remove object from all live query sets
                     if (SupportsLiveQueries())
                     {
@@ -290,6 +291,7 @@ namespace NHibernate.Caches.Redis
                                                              client.Serialize(key)));
                         }
                     }
+                     */
                     pipe.Flush();
                 }
             }

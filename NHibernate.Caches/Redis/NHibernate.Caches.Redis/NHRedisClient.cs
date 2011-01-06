@@ -225,10 +225,10 @@ namespace NHibernate.Caches.Redis
 
                     //watch for changes to generation key and cache key
                     IList<ScratchCacheItem> items = scratchItems;
-                    pipe.QueueCommand(r => ((RedisClient)r).Watch(GlobalKeys(items, true)));
+                    pipe.QueueCommand(r => ((RedisClient)r).Watch(WatchKeys(items, true)));
 
                     //get all of the current objects
-                    pipe.QueueCommand(r => ((RedisNativeClient)r).MGet(GlobalKeys(items, false)), x => currentItemsRaw = x);
+                    pipe.QueueCommand(r => ((RedisNativeClient)r).MGet(WatchKeys(items, false)), x => currentItemsRaw = x);
 
                     pipe.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()), x => generationFromServer = Convert.ToInt64(x));
                     pipe.Flush();
@@ -571,20 +571,6 @@ namespace NHibernate.Caches.Redis
 
         #endregion
 
-        private string[] GlobalKeys(IEnumerable<ScratchCacheItem> scratchItems, bool includeGenerationKey)
-        {
-            var nonNull = new List<string>();
-            if (includeGenerationKey)
-                nonNull.Add(CacheNamespace.GetGenerationKey());
-            foreach (var item in scratchItems)
-            {
-                if (item.PutParameters.Key != null)
-                    nonNull.Add(CacheNamespace.GlobalCacheKey(item.PutParameters.Key));
-            }
-            return nonNull.ToArray();
-        }
-
-      
         /// <summary>
         /// 
         /// </summary>
