@@ -9,7 +9,6 @@ namespace NHibernate.Caches.Redis
 {
     public class CustomRedisClient : RedisClient
     {
-        private MemoryStream _memoryStream = new MemoryStream();
         private BinaryFormatter _bf = new BinaryFormatter();
 
         public CustomRedisClient(string host, int port)
@@ -52,15 +51,16 @@ namespace NHibernate.Caches.Redis
         }
 
 
+
         // Serialize object to buffer
         public  byte[] Serialize(object value)
         {
             if (value == null)
                 return null;
-            var dictEntry = new DictionaryEntry(null, value);
+             MemoryStream _memoryStream = new MemoryStream();
             _memoryStream.Seek(0, 0);
-            _bf.Serialize(_memoryStream, dictEntry);
-            return _memoryStream.GetBuffer();
+            _bf.Serialize(_memoryStream, value);
+            return _memoryStream.ToArray();
         }
 
         // Deserialize buffer to object
@@ -68,11 +68,11 @@ namespace NHibernate.Caches.Redis
         {         
             if (someBytes == null)
                 return null;
-            _memoryStream.Seek(0, 0);
+            MemoryStream _memoryStream = new MemoryStream();
             _memoryStream.Write(someBytes, 0, someBytes.Length);
             _memoryStream.Seek(0, 0);
-            var de = (DictionaryEntry)_bf.Deserialize(_memoryStream);
-            return de.Value;
+            var de = _bf.Deserialize(_memoryStream);
+            return de;
         }
         public IList Deserialize(byte[][] byteArray)
         {

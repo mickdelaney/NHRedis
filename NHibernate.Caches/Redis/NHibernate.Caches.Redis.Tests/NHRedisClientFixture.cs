@@ -164,6 +164,7 @@ namespace NHibernate.Caches.Redis.Tests
 			Assert.Throws<ArgumentNullException>(() => cache.Put(new CachePutParameters(null, "nunit", null) ));
 		}
 
+        [Serializable]
         public class SimpleComparer : IComparer
         {
 
@@ -200,14 +201,15 @@ namespace NHibernate.Caches.Redis.Tests
 
             var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
             var members = cache.HGetAll(key);
-            for (int i = 0; i < members.Count; i+=2 )
+            foreach (var entry in members)
             {
-                cache.HDel(key, members[i].ToString());
+                cache.HDel(key, entry.Key); 
             }
+
 
             var keyValues = new Dictionary<object, LiveQueryCacheEntry>();
             keyValues["field1"] = new LiveQueryCacheEntry("value1", 1, null);
-            keyValues["field2"] = new LiveQueryCacheEntry("value2", 1, null);
+            keyValues["field2"] = new LiveQueryCacheEntry("value2", 2, null);
             foreach (var entry in keyValues)
             {
                 Assert.IsFalse(cache.HDel(key, entry.Key));
@@ -215,9 +217,10 @@ namespace NHibernate.Caches.Redis.Tests
 
             cache.HSet(key, keyValues);
             members = cache.HGetAll(key);
-            foreach (var entry in keyValues)
+            foreach (var entry in members)
             {
                 Assert.IsTrue(cache.HDel(key, entry.Key));
+                Assert.AreEqual(keyValues[entry.Key], entry.Value);
             }
         }
 
@@ -235,8 +238,8 @@ namespace NHibernate.Caches.Redis.Tests
             }
 
             var keyValues = new Dictionary<object, LiveQueryCacheEntry>();
-            keyValues["field1"] = new LiveQueryCacheEntry("value1", 1, null);
-            keyValues["field2"] = new LiveQueryCacheEntry("value2", 1, null);
+            keyValues["field1"] = new LiveQueryCacheEntry("value1", 1, new SimpleComparer());
+            keyValues["field2"] = new LiveQueryCacheEntry("value2", 2, new SimpleComparer());
             cache.HSet(key, keyValues);
 
             members = cache.HGetAll(key);

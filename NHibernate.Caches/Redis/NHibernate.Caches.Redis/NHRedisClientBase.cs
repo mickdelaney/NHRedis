@@ -265,18 +265,21 @@ namespace NHibernate.Caches.Redis
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="key"></param>
+        /// <param name="entityCacheKey"></param>
         /// <param name="client"></param>
         /// <param name="pipe"></param>
-        protected void QueueDeleteAll(object key, CustomRedisClient client, IRedisQueueableOperation pipe)
+        protected void QueueDeleteAll(object entityCacheKey, CustomRedisClient client, IRedisQueueableOperation pipe)
         {
+            //entityCacheKey represents non-global key from entity cache
+            // must convert to live query field
+
             //remove object from all live query hashes
             if (!SupportsLiveQueries()) return;
             foreach (var liveQueryKey in _inMemoryQueryProvider.GetQueries().Keys)
             {
                 QueryKey queryKey = liveQueryKey;
-                pipe.QueueCommand(r =>  
-                    ((RedisNativeClient)r).HDel(_liveQueryCacheNamespace.GlobalCacheKey(queryKey),client.Serialize(key)));
+                pipe.QueueCommand(r =>
+                    ((RedisNativeClient)r).HDel(_liveQueryCacheNamespace.GlobalCacheKey(queryKey), GetFieldBytes(entityCacheKey) ));
             }
         }
 
@@ -297,9 +300,11 @@ namespace NHibernate.Caches.Redis
                 var rc = new Dictionary<object, T>();
                 for (var i = 0; i < members.Length; i += 2)
                 {
-                    var temp = disposable.Client.Deserialize(members[i + 1]);
+                    var temp = client.Deserialize(members[i + 1]);
                     if (temp is T)
-                       rc[Encoding.GetString(members[i])] = (T)disposable.Client.Deserialize(members[i + 1]);
+                       rc[GetFieldString(members[i])] = (T)temp;
+                    else
+                        throw new RedisException(String.Format("HGetAll retrieved object of type {0}; was expecting type {1}", temp.GetType(), typeof(T)));
                 }
                 return rc;
             }
@@ -317,7 +322,7 @@ namespace NHibernate.Caches.Redis
             using (var disposable = new DisposableClient(ClientManager))
             {
                 var client = disposable.Client;
-                client.HSet(redisNamespace.GlobalCacheKey(key), Encoding.GetBytes(field.ToString()), client.Serialize(value));
+                client.HSet(redisNamespace.GlobalCacheKey(key), GetFieldBytes(field), client.Serialize(value));
             }
         }
 
@@ -338,7 +343,7 @@ namespace NHibernate.Caches.Redis
                 var i = 0;
                 foreach (var kv in keyValues)
                 {
-                    fieldBytes[i] = Encoding.GetBytes(kv.Key.ToString());
+                    fieldBytes[i] = GetFieldBytes(kv.Key);
                     valueBytes[i] = client.Serialize(kv.Value);
                     i++;
 
@@ -362,7 +367,7 @@ namespace NHibernate.Caches.Redis
             using (var disposable = new DisposableClient(ClientManager))
             {
                 var client = disposable.Client;
-                return client.HDel(redisNamespace.GlobalCacheKey(key), Encoding.GetBytes(field.ToString())) == 1;
+                return client.HDel(redisNamespace.GlobalCacheKey(key), GetFieldBytes(field)) == 1;
             }
         }
 
@@ -408,6 +413,15 @@ namespace NHibernate.Caches.Redis
         public override void Destroy()
         {
             Clear();
+        }
+
+        private byte[] GetFieldBytes(object field)
+        {
+            return Encoding.GetBytes(field.ToString());
+        }
+        private string GetFieldString(byte[] fieldBytes)
+        {
+            return Encoding.GetString(fieldBytes);
         }
     }
 }
