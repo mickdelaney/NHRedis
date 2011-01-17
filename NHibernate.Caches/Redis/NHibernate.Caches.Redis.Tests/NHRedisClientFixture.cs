@@ -49,9 +49,9 @@ namespace NHibernate.Caches.Redis.Tests
 
         public class TestInMemoryQuery : IInMemoryQuery
         {
-            public bool Match(object entity)
+            public override object[] Projection(object entity)
             {
-                return true;
+                return null;
             }
         }
 
