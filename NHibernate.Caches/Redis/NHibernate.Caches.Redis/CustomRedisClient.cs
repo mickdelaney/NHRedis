@@ -12,63 +12,76 @@ namespace NHibernate.Caches.Redis
     public class CustomRedisClient : RedisClient
     {
         private BinaryFormatter _bf = new BinaryFormatter();
-        private HashSet<object> acquiredLocks = new HashSet<object>();
+ 
 
         public CustomRedisClient(string host, int port)
 			: base(host, port)
 		{
 		}
 
-        public void Lock(string lockKey)
+        private double GetLockExire(TimeSpan ts, int timeout)
         {
-            if (acquiredLocks.Contains(lockKey))
-                return;
-
+           return ts.TotalSeconds + timeout + 1;
+        }
+        
+        /// <summary>
+        /// distributed, non-reentrant lock
+        /// </summary>
+        /// <param name="key"></param>
+        /// <param name="timeout">timeout lock acquisition, in seconds</param>
+        public double Lock(string key, int timeout)
+        {
             int totalTime = 0;
-            int lockTimeout = 60;
-            int timeout = 60;
             int tryCount = 10;
+            int lockTimeout = 60;
             int sleepIfLockSet = 500;
+            timeout *= 1000;
     
-         
             var ts = (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0));
-            int wasSet = SetNX(lockKey, Serialize(ts.TotalSeconds + lockTimeout + 1));
+            double lockExpire = GetLockExire(ts, lockTimeout);
+            int wasSet = SetNX(key, Serialize(lockExpire));
             while (wasSet == 0 && totalTime < timeout)
             {
                 int count = 0;
-                while (wasSet == 0 && count < tryCount)
+                while (wasSet == 0 && count < tryCount && totalTime < timeout)
                 {
                     System.Threading.Thread.Sleep(sleepIfLockSet);
                     totalTime += sleepIfLockSet;
                     ts = (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0));
-                    wasSet = SetNX(lockKey, Serialize(ts.TotalSeconds + lockTimeout + 1));
+                    lockExpire = GetLockExire(ts, lockTimeout);
+                    wasSet = SetNX(key, Serialize(lockExpire));
                     count++;
                 }
-                // handle possibliity of crashed client still holding the lock
-                if (wasSet == 0)
-                {
-                    var lockVal = (double) Deserialize(Get(lockKey));
-                    if (lockVal < ts.TotalSeconds)
-                    {
-                        ts = (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0));
-                        lockVal = (double) Deserialize(GetSet(lockKey, Serialize(ts.TotalSeconds + lockTimeout + 1)));
-                        // Acquired lock !!
-                        if (lockVal < ts.TotalSeconds)
-                            wasSet = 1;
-                    }
-                }
+                if (wasSet != 0) break;
 
+                // handle possibliity of crashed client still holding the lock
+                var lockVal = Deserialize(Get(key));
+                if (lockVal != null && (double)lockVal < ts.TotalSeconds)
+                {
+                    ts = (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0));
+                    lockExpire = GetLockExire(ts, lockTimeout);
+                    lockVal = Deserialize(GetSet(key, Serialize(lockExpire)));
+                    // Acquired lock !!
+                    if ( (double)lockVal < ts.TotalSeconds)
+                        wasSet = 1;
+                }
+                else
+                {
+                    System.Threading.Thread.Sleep(sleepIfLockSet);
+                    totalTime += sleepIfLockSet;
+                }
             }
-            if (wasSet == 1)
-                acquiredLocks.Add(lockKey);
+            return (wasSet == 1) ? lockExpire : 0;
+
         }
 
-        public void Unlock(string lockKey)
+        public void Unlock(string key)
         {
-            if (acquiredLocks.Contains(lockKey))
-                Del(lockKey);
-            else
-                Debug.WriteLine(String.Format("tried to unlock key = {0} that was not locked by this client", lockKey));
+            Del(key);
+
+               
+          //  else
+          //      Debug.WriteLine(String.Format("tried to unlock key = {0} that was not locked by this client", key));
         }
 
         public long FetchGeneration(string generationKey)

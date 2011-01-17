@@ -25,7 +25,6 @@
 #endregion
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using NHibernate.Cache.Entry;
@@ -33,7 +32,6 @@ using NHibernate.Cache.Query;
 using ServiceStack.Redis;
 using NHibernate.Cache;
 using ServiceStack.Redis.Pipeline;
-using Environment = NHibernate.Cfg.Environment;
 
 namespace NHibernate.Caches.Redis
 {
@@ -56,6 +54,8 @@ namespace NHibernate.Caches.Redis
         protected const string PendingLiveQueriesKey = "PendingLiveQueriesKey";
 
         protected readonly UTF8Encoding Encoding = new UTF8Encoding();
+
+        protected IDictionary<object, double> AcquiredLocks = new Dictionary<object,double>();
 
         static NhRedisClientBase()
         {

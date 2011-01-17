@@ -76,7 +76,8 @@ namespace NHibernate.Caches.Redis.Tests
 		{
 			XmlConfigurator.Configure();
 			_props = new Dictionary<string, string> {{RedisProvider.NoClearPropertyKey, "false"}, 
-                                                     {RedisProvider.ExpirationPropertyKey, "20"}};
+                                                     {AbstractCache.ExpirationPropertyKey, "20"}};
+          
 			_provider = new RedisProvider();
 			_provider.Start(_props);
 		}
@@ -398,7 +399,29 @@ namespace NHibernate.Caches.Redis.Tests
 			Assert.IsNotNull(item);
 			Assert.AreEqual(value, item, "didn't return the item we added");
 		}
+        [Test]
+        public virtual void TestLock()
+        {
 
+            ICache cache = _provider.BuildCache(null, new TestInMemoryQueryProvider(), CacheFactory.ReadWriteCow, _props);
+            Assert.IsNotNull(cache, "no cache returned");
+
+            string key = "key1";
+
+            Assert.IsTrue(cache.Lock(key));
+
+            //can't re-lock
+            Assert.IsFalse(((NhRedisClient)cache).Lock(key, 1));
+
+            cache.Unlock(key);
+
+            //can now lock
+            Assert.IsTrue(cache.Lock(key));
+
+            //cleanup
+            cache.Unlock(key);
+
+        }
 		[Test]
 		public void TestRegions()
 		{

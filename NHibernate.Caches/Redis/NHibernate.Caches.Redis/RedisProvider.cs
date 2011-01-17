@@ -24,7 +24,6 @@
 
 #endregion
 
-using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Text;
@@ -46,7 +45,8 @@ namespace NHibernate.Caches.Redis
 
         private static RedisGarbageCollector _garbageCollector;
 
-        public static string ExpirationPropertyKey = "expiration";
+
+
         public static string NoClearPropertyKey = "no_clear_on_client";
 
 		static RedisProvider()

@@ -26,6 +26,7 @@
 
 using System.Collections.Generic;
 using log4net.Config;
+using NHibernate.Cache;
 using NUnit.Framework;
 
 namespace NHibernate.Caches.Redis.Tests
@@ -38,13 +39,36 @@ namespace NHibernate.Caches.Redis.Tests
         {
             XmlConfigurator.Configure();
             _props = new Dictionary<string, string> {{RedisProvider.NoClearPropertyKey, "true"}, 
-                                                     {RedisProvider.ExpirationPropertyKey, "20"}};
+                                                     {AbstractCache.ExpirationPropertyKey, "20"}};
             _provider = new RedisProvider();
             _provider.Start(_props);
         }
         [Test]
         public override void TestClear()
         {
+        }
+        [Test]
+        public override void TestLock()
+        {
+
+            ICache cache = _provider.BuildCache(null, new TestInMemoryQueryProvider(), CacheFactory.ReadWriteCow, _props);
+            Assert.IsNotNull(cache, "no cache returned");
+
+            string key = "key1";
+    
+            Assert.IsTrue(cache.Lock(key));
+
+            //can't re-lock
+            Assert.IsFalse(((NhRedisClientNoClear)cache).Lock(key,1));
+  
+            cache.Unlock(key);
+
+            //can now lock
+            Assert.IsTrue(cache.Lock(key));
+
+            //cleanup
+            cache.Unlock(key);
+ 
         }
     }
 }

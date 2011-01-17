@@ -289,12 +289,9 @@ namespace NHibernate.Caches.Redis
         /// 
         /// </summary>
         /// <param name="key"></param>
-        public override void Lock(object key)
+        public override bool Lock(object key)
         {
-            using (var disposable = new DisposableClient(ClientManager))
-            {
-                disposable.Client.Lock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey));
-            }
+            return Lock(key, Timeout);
         }
 
         /// <summary>
@@ -306,6 +303,7 @@ namespace NHibernate.Caches.Redis
             using (var disposable = new DisposableClient(ClientManager))
             {
                 disposable.Client.Unlock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey));
+                AcquiredLocks.Remove(key);
             }
         }
 
@@ -360,6 +358,18 @@ namespace NHibernate.Caches.Redis
         public override void Destroy()
         {
             Clear();
+        }
+        public bool Lock(object key, int timeout)
+        {
+            bool rc;
+            using (var disposable = new DisposableClient(ClientManager))
+            {
+                double lockExpire = disposable.Client.Lock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey), timeout);
+                rc = (lockExpire != 0);
+                if (rc)
+                    AcquiredLocks[key] = lockExpire;
+            }
+            return rc;
         }
     }
 }
