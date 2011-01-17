@@ -28,22 +28,21 @@ namespace NHibernate.Caches.Redis
         /// distributed, non-reentrant lock
         /// </summary>
         /// <param name="key"></param>
-        /// <param name="timeout">timeout lock acquisition, in seconds</param>
-        public double Lock(string key, int timeout)
+        /// <param name="acquisitionTimeout">timeout for lock acquisition, in seconds</param>
+        public double Lock(string key, int acquisitionTimeout, int lockTimeout)
         {
             int totalTime = 0;
             int tryCount = 10;
-            int lockTimeout = 60;
             int sleepIfLockSet = 500;
-            timeout *= 1000;
+            acquisitionTimeout *= 1000;
     
             var ts = (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0));
             double lockExpire = GetLockExire(ts, lockTimeout);
             int wasSet = SetNX(key, Serialize(lockExpire));
-            while (wasSet == 0 && totalTime < timeout)
+            while (wasSet == 0 && totalTime < acquisitionTimeout)
             {
                 int count = 0;
-                while (wasSet == 0 && count < tryCount && totalTime < timeout)
+                while (wasSet == 0 && count < tryCount && totalTime < acquisitionTimeout)
                 {
                     System.Threading.Thread.Sleep(sleepIfLockSet);
                     totalTime += sleepIfLockSet;

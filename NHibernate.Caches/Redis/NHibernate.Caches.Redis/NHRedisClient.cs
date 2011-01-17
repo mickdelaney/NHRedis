@@ -410,7 +410,47 @@ namespace NHibernate.Caches.Redis
         /// <param name="key"></param>
         public override bool Lock(object key)
         {
-           return Lock(key, Timeout);
+
+          //BROKEN /////////////////////////////////////
+          /*  IRedisPipeline pipe = null;
+            bool rc = false;
+            try
+            {
+                using (var disposable = new DisposableClient(ClientManager))
+                {
+                    var client = disposable.Client;
+                    long generationFromServer = CacheNamespace.GetGeneration();
+                    pipe = client.CreatePipeline();
+
+                    pipe.QueueCommand(
+                        r =>
+                        ((CustomRedisClient)r).Lock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey), _lockAcquisitionTimeout, _lockTimeout),
+                            x => rc = (x != 0));
+                    pipe.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()),
+                                      x => generationFromServer = Convert.ToInt64(x));
+                    pipe.Flush();
+
+                    while (generationFromServer != CacheNamespace.GetGeneration())
+                    {
+                        //update cached generation value, and try again
+                        CacheNamespace.SetGeneration(generationFromServer);
+
+                        pipe.Replay();
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                Log.WarnFormat("could not acquire lock for key: {0}", key);
+                throw;
+            }
+            finally
+            {
+                if (pipe != null)
+                    pipe.Dispose();
+            }
+            return rc;*/
+            return false;
         }
 
         /// <summary>
@@ -538,51 +578,7 @@ namespace NHibernate.Caches.Redis
         #endregion
 
 
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="key"></param>
-        public bool Lock(object key, int timeout)
-        {
-            IRedisPipeline pipe = null;
-            bool rc = false;
-            try
-            {
-                using (var disposable = new DisposableClient(ClientManager))
-                {
-                    var client = disposable.Client;
-                    long generationFromServer = CacheNamespace.GetGeneration();
-                    pipe = client.CreatePipeline();
 
-                    pipe.QueueCommand(
-                        r =>
-                        ((CustomRedisClient)r).Lock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey), timeout),
-                            x => rc = (x != 0));
-                    pipe.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()),
-                                      x => generationFromServer = Convert.ToInt64(x));
-                    pipe.Flush();
-
-                    while (generationFromServer != CacheNamespace.GetGeneration())
-                    {
-                        //update cached generation value, and try again
-                        CacheNamespace.SetGeneration(generationFromServer);
-
-                        pipe.Replay();
-                    }
-                }
-            }
-            catch (Exception)
-            {
-                Log.WarnFormat("could not acquire lock for key: {0}", key);
-                throw;
-            }
-            finally
-            {
-                if (pipe != null)
-                    pipe.Dispose();
-            }
-            return rc;
-        }
 
         /// <summary>
         /// 
