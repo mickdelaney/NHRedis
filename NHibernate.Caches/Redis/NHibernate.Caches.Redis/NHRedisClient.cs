@@ -92,7 +92,7 @@ namespace NHibernate.Caches.Redis
             IRedisPipeline pipe = null;
             try
             {
-                using (var disposable = new DisposableClient(ClientManager))
+                using (var disposable = new DisposablePooledClient(ClientManager))
                 {
                     var client = disposable.Client;
                     //do transactioned get of generation and value
@@ -153,7 +153,7 @@ namespace NHibernate.Caches.Redis
 
             try
             {
-                using (var disposable = new DisposableClient(ClientManager))
+                using (var disposable = new DisposablePooledClient(ClientManager))
                 {
                     var client = disposable.Client;
                     var bytes = client.Serialize(value);
@@ -216,7 +216,7 @@ namespace NHibernate.Caches.Redis
             IRedisPipeline pipe = null;
             try
             {
-                using (var disposable = new DisposableClient(ClientManager))
+                using (var disposable = new DisposablePooledClient(ClientManager))
                 {
                     var client = disposable.Client;
 
@@ -352,7 +352,7 @@ namespace NHibernate.Caches.Redis
             IRedisPipeline pipe = null;
             try
             {
-                using (var disposable = new DisposableClient(ClientManager))
+                using (var disposable = new DisposablePooledClient(ClientManager))
                 {
                     var client = disposable.Client;
                     long generationFromServer = CacheNamespace.GetGeneration();
@@ -390,7 +390,7 @@ namespace NHibernate.Caches.Redis
         public override void Clear()
 		{
             //rename set of keys, and Start expiring the keys
-            using (var disposable = new DisposableClient(ClientManager))
+            using (var disposable = new DisposablePooledClient(ClientManager))
             {
                 var client = disposable.Client;
                 using (var trans = client.CreateTransaction())
@@ -417,7 +417,7 @@ namespace NHibernate.Caches.Redis
             bool rc = false;
             try
             {
-                using (var disposable = new DisposableClient(ClientManager))
+                using (var disposable = new DisposablePooledClient(ClientManager))
                 {
                     var client = disposable.Client;
                     long generationFromServer = CacheNamespace.GetGeneration();
@@ -465,7 +465,7 @@ namespace NHibernate.Caches.Redis
             IRedisPipeline pipe = null;
             try
             {
-                using (var disposable = new DisposableClient(ClientManager))
+                using (var disposable = new DisposablePooledClient(ClientManager))
                 {
                     var client = disposable.Client;
                     long generationFromServer = CacheNamespace.GetGeneration();
@@ -507,7 +507,7 @@ namespace NHibernate.Caches.Redis
         public override IDictionary MultiGet(IEnumerable keys)
         {
             var rc = new Dictionary<object, object>();
-            using (var disposable = new DisposableClient(ClientManager))
+            using (var disposable = new DisposablePooledClient(ClientManager))
             {
                 var client = disposable.Client;
 
@@ -598,7 +598,7 @@ namespace NHibernate.Caches.Redis
         private long FetchGeneration()
         {
             long rc;
-            using (var disposable = new DisposableClient(ClientManager))
+            using (var disposable = new DisposablePooledClient(ClientManager))
             {
                 rc = disposable.Client.FetchGeneration(CacheNamespace.GetGenerationKey());
             }
