@@ -58,21 +58,15 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Locking\ReaderWriterLockingStrategy.cs" />
     <Compile Include="NHRedisClientBase.cs" />
     <Compile Include="NHRedisClientNoClear.cs" />
     <Compile Include="CustomRedisClient.cs" />
     <Compile Include="CustomRedisClientFactory.cs" />
     <Compile Include="DisposableClient.cs" />
-    <Compile Include="Locking\ILockingStrategy.cs" />
-    <Compile Include="Locking\NoLockingStrategy.cs" />
-    <Compile Include="Locking\ReadLock.cs" />
-    <Compile Include="Locking\WriteLock.cs" />
     <Compile Include="NHRedisClient.cs" />
     <Compile Include="NHRedisException.cs" />
     <Compile Include="RedisConfig.cs" />
     <Compile Include="RedisGarbageCollector.cs" />
-    <Compile Include="RedisNamespace.cs" />
     <Compile Include="RedisProvider.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RedisSectionHandler.cs" />

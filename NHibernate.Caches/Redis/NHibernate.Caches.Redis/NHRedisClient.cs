@@ -31,6 +31,7 @@ using ServiceStack.Redis;
 using NHibernate.Cache.Query;
 using NHibernate.Cache;
 using ServiceStack.Redis.Pipeline;
+using ServiceStack.Redis.Utilities;
 
 namespace NHibernate.Caches.Redis
 {
