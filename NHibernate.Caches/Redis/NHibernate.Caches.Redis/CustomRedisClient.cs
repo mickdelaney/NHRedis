@@ -1,6 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.Diagnostics;
-using Iesi.Collections;
 using ServiceStack.Redis;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Collections;
@@ -11,34 +9,40 @@ namespace NHibernate.Caches.Redis
 {
     public class CustomRedisClient : RedisClient
     {
-        private BinaryFormatter _bf = new BinaryFormatter();
+        private readonly BinaryFormatter _bf = new BinaryFormatter();
  
-
         public CustomRedisClient(string host, int port)
 			: base(host, port)
 		{
 		}
 
-        private double GetLockExire(TimeSpan ts, int timeout)
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="ts"></param>
+        /// <param name="timeout"></param>
+        /// <returns></returns>
+        private static double CalculateLockExire(TimeSpan ts, int timeout)
         {
            return ts.TotalSeconds + timeout + 1;
         }
         
         /// <summary>
-        /// distributed, non-reentrant lock
+        /// acquire distributed, non-reentrant lock on key
         /// </summary>
-        /// <param name="key"></param>
-        /// <param name="acquisitionTimeout">timeout for lock acquisition, in seconds</param>
+        /// <param name="key">global key for this lock</param>
+        /// <param name="acquisitionTimeout">timeout for acquiring lock</param>
+        /// <param name="lockTimeout">timeout for lock, in seconds (stored as value against lock key) </param>
         public double Lock(string key, int acquisitionTimeout, int lockTimeout)
         {
-            int totalTime = 0;
-            int tryCount = 10;
-            int sleepIfLockSet = 500;
-            acquisitionTimeout *= 1000;
+            int sleepIfLockSet = 200;
+            acquisitionTimeout *= 1000; //convert to ms
+            int tryCount = acquisitionTimeout/sleepIfLockSet + 1;
     
             var ts = (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0));
-            double lockExpire = GetLockExire(ts, lockTimeout);
+            double lockExpire = CalculateLockExire(ts, lockTimeout);
             int wasSet = SetNX(key, Serialize(lockExpire));
+            int totalTime = 0;
             while (wasSet == 0 && totalTime < acquisitionTimeout)
             {
                 int count = 0;
@@ -47,40 +51,84 @@ namespace NHibernate.Caches.Redis
                     System.Threading.Thread.Sleep(sleepIfLockSet);
                     totalTime += sleepIfLockSet;
                     ts = (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0));
-                    lockExpire = GetLockExire(ts, lockTimeout);
+                    lockExpire = CalculateLockExire(ts, lockTimeout);
                     wasSet = SetNX(key, Serialize(lockExpire));
                     count++;
                 }
+                // acquired lock!
                 if (wasSet != 0) break;
 
                 // handle possibliity of crashed client still holding the lock
-                var lockVal = Deserialize(Get(key));
-                if (lockVal != null && (double)lockVal < ts.TotalSeconds)
+                using (var pipe = CreatePipeline())
                 {
-                    ts = (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0));
-                    lockExpire = GetLockExire(ts, lockTimeout);
-                    lockVal = Deserialize(GetSet(key, Serialize(lockExpire)));
-                    // Acquired lock !!
-                    if ( (double)lockVal < ts.TotalSeconds)
-                        wasSet = 1;
+                    object lockValRaw = null;
+                    pipe.QueueCommand(r => ((RedisNativeClient)r).Watch(key));
+                    pipe.QueueCommand(r => ((RedisNativeClient)r).Get(key), x => lockValRaw = Deserialize((x)));
+                    pipe.Flush();
+
+                    double lockVal = 0;
+                    if (lockValRaw != null)
+                        lockVal = (double) lockValRaw;
+
+                    // if lock value is null, or expired, then we can try to acquire it
+                    if (lockValRaw == null || lockVal < ts.TotalSeconds)
+                    {
+                        ts = (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0));
+                        lockExpire = CalculateLockExire(ts, lockTimeout);
+                        using (var trans = CreateTransaction())
+                        {
+                            var expire = lockExpire;
+                            trans.QueueCommand(r => ((RedisNativeClient)r).Set(key, Serialize(expire)));
+                            if (trans.Commit())
+                                wasSet = 1; //acquire lock!
+                        }
+                    }
+                    else
+                    {
+                        UnWatch();
+                    }
                 }
-                else
-                {
-                    System.Threading.Thread.Sleep(sleepIfLockSet);
-                    totalTime += sleepIfLockSet;
-                }
+                if (wasSet == 1) break;
+                System.Threading.Thread.Sleep(sleepIfLockSet);
+                totalTime += sleepIfLockSet;
             }
             return (wasSet == 1) ? lockExpire : 0;
 
         }
-
-        public void Unlock(string key)
+        /// <summary>
+        /// unlock key
+        /// </summary>
+        /// <param name="key">global lock key</param>
+        /// <param name="setLockValue">value that lock key was set to when it was locked</param>
+        public bool Unlock(string key, double setLockValue)
         {
-            Del(key);
+            bool rc = false;
+            using (var pipe = CreatePipeline())
+            {
+                object lockValRaw = null;
+                pipe.QueueCommand(r => ((RedisNativeClient) r).Watch(key));
+                pipe.QueueCommand(r => ((RedisNativeClient) r).Get(key), x => lockValRaw = Deserialize((x)));
+                pipe.Flush();
 
-               
-          //  else
-          //      Debug.WriteLine(String.Format("tried to unlock key = {0} that was not locked by this client", key));
+                var needUnwatch = true;
+                if (lockValRaw != null)
+                {
+                    var lockVal = (double) lockValRaw;
+                    if (lockVal == setLockValue)
+                    {
+                        needUnwatch = false;
+                        using (var trans = CreateTransaction())
+                        {
+                            trans.QueueCommand(r => ((RedisNativeClient) r).Del(key));
+                            if (trans.Commit())
+                                rc = true;
+                        }
+                    }
+                }
+                if (needUnwatch)
+                    UnWatch();
+            }
+            return rc;
         }
 
         public long FetchGeneration(string generationKey)
@@ -108,10 +156,10 @@ namespace NHibernate.Caches.Redis
         {
             if (value == null)
                 return null;
-             MemoryStream _memoryStream = new MemoryStream();
-            _memoryStream.Seek(0, 0);
-            _bf.Serialize(_memoryStream, value);
-            return _memoryStream.ToArray();
+             var memoryStream = new MemoryStream();
+            memoryStream.Seek(0, 0);
+            _bf.Serialize(memoryStream, value);
+            return memoryStream.ToArray();
         }
 
         // Deserialize buffer to object
@@ -119,10 +167,10 @@ namespace NHibernate.Caches.Redis
         {         
             if (someBytes == null)
                 return null;
-            MemoryStream _memoryStream = new MemoryStream();
-            _memoryStream.Write(someBytes, 0, someBytes.Length);
-            _memoryStream.Seek(0, 0);
-            var de = _bf.Deserialize(_memoryStream);
+            var memoryStream = new MemoryStream();
+            memoryStream.Write(someBytes, 0, someBytes.Length);
+            memoryStream.Seek(0, 0);
+            var de = _bf.Deserialize(memoryStream);
             return de;
         }
         public IList Deserialize(byte[][] byteArray)

@@ -308,9 +308,11 @@ namespace NHibernate.Caches.Redis
         /// <param name="key"></param>
         public override void Unlock(object key)
         {
+            if (!AcquiredLocks.ContainsKey(key))
+                return;
             using (var disposable = new DisposableClient(ClientManager))
             {
-                disposable.Client.Unlock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey));
+                disposable.Client.Unlock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey), AcquiredLocks[key]);
                 AcquiredLocks.Remove(key);
             }
         }

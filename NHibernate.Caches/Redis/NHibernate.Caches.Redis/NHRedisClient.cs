@@ -459,6 +459,8 @@ namespace NHibernate.Caches.Redis
         /// <param name="key"></param>
         public override void Unlock(object key)
         {
+            if (!AcquiredLocks.ContainsKey(key))
+                return;
             IRedisPipeline pipe = null;
             try
             {
@@ -470,7 +472,7 @@ namespace NHibernate.Caches.Redis
 
                     pipe.QueueCommand(
                         r =>
-                        ((CustomRedisClient)r).Unlock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey)));
+                        ((CustomRedisClient)r).Unlock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey), AcquiredLocks[key]));
                     pipe.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()),
                                       x => generationFromServer = Convert.ToInt64(x));
                     pipe.Flush();

@@ -25,6 +25,7 @@
 #endregion
 
 using System.Collections.Generic;
+using System.Threading;
 using log4net.Config;
 using NHibernate.Cache;
 using NUnit.Framework;
@@ -33,7 +34,7 @@ namespace NHibernate.Caches.Redis.Tests
 {
     public class NhRedisClientNoClearFixture : NhRedisClientFixture
     {
-
+        private readonly int _lockTimeout = 2;
         [TestFixtureSetUp]
         public void FixtureSetup()
         {
@@ -41,7 +42,7 @@ namespace NHibernate.Caches.Redis.Tests
             _props = new Dictionary<string, string> {{RedisProvider.NoClearPropertyKey, "true"}, 
                                                      {AbstractCache.ExpirationPropertyKey, "20"},
                                                     {AbstractCache.LockAcquisitionTimeoutPropertyKey, "1"},
-                                                     {AbstractCache.LockTimeoutPropertyKey, "20"}
+                                                     {AbstractCache.LockTimeoutPropertyKey, _lockTimeout.ToString()}
             };
             _provider = new RedisProvider();
             _provider.Start(_props);
@@ -63,6 +64,10 @@ namespace NHibernate.Caches.Redis.Tests
 
             //can't re-lock
             Assert.IsFalse(cache.Lock(key));
+
+            // re-acquire lock after timeout
+            Thread.Sleep(_lockTimeout * 1000 + 1000);
+            Assert.IsTrue(cache.Lock(key));
   
             cache.Unlock(key);
 
