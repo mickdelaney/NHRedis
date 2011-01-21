@@ -131,12 +131,22 @@ namespace NHibernate.Caches.Redis
             return rc;
         }
 
+        /// <summary>
+        /// fetch generation (for cache region)
+        /// </summary>
+        /// <param name="generationKey"></param>
+        /// <returns></returns>
         public long FetchGeneration(string generationKey)
         {
             var val = GetValue(generationKey);
             return (val == null) ? Incr(generationKey) : Convert.ToInt64(val);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="values">array of serializable objects</param>
+        /// <returns></returns>
         public List<byte[]> Serialize(object[] values)
         {
             var rc = new List<byte[]>();
@@ -149,9 +159,11 @@ namespace NHibernate.Caches.Redis
             return rc;
         }
 
-
-
-        // Serialize object to buffer
+        /// <summary>
+        ///  Serialize object to buffer
+        /// </summary>
+        /// <param name="value">serializable object</param>
+        /// <returns></returns>
         public  byte[] Serialize(object value)
         {
             if (value == null)
@@ -162,7 +174,11 @@ namespace NHibernate.Caches.Redis
             return memoryStream.ToArray();
         }
 
-        // Deserialize buffer to object
+        /// <summary>
+        ///     Deserialize buffer to object
+        /// </summary>
+        /// <param name="someBytes">byte array to deserialize</param>
+        /// <returns></returns>
         public  object Deserialize(byte[] someBytes)
         {         
             if (someBytes == null)
@@ -173,6 +189,11 @@ namespace NHibernate.Caches.Redis
             var de = _bf.Deserialize(memoryStream);
             return de;
         }
+        /// <summary>
+        /// deserialize an array of byte arrays
+        /// </summary>
+        /// <param name="byteArray"></param>
+        /// <returns></returns>
         public IList Deserialize(byte[][] byteArray)
         {
             IList rc = new ArrayList();
