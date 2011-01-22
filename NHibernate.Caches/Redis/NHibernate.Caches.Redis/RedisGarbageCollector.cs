@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Threading;
 using ServiceStack.Redis;
-using ServiceStack.Redis.Utilities;
+using ServiceStack.Redis.Support;
+
 
 namespace NHibernate.Caches.Redis
 {

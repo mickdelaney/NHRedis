@@ -2,8 +2,8 @@
 using ServiceStack.Redis;
 using System.Collections;
 using System;
-using ServiceStack.Redis.Utilities;
-using ServiceStack.Redis.Utilities.Locking;
+using ServiceStack.Redis.Support;
+using ServiceStack.Redis.Support.Locking;
 
 namespace NHibernate.Caches.Redis
 {
