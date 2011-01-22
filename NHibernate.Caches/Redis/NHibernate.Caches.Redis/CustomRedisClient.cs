@@ -1,10 +1,9 @@
 ﻿using System.Collections.Generic;
 using ServiceStack.Redis;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Collections;
-using System.IO;
 using System;
 using ServiceStack.Redis.Utilities;
+using ServiceStack.Redis.Utilities.Locking;
 
 namespace NHibernate.Caches.Redis
 {
