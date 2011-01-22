@@ -23,7 +23,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="key">global key for this lock</param>
         /// <param name="acquisitionTimeout">timeout for acquiring lock</param>
         /// <param name="lockTimeout">timeout for lock, in seconds (stored as value against lock key) </param>
-        public double Lock(string key, int acquisitionTimeout, int lockTimeout)
+        public long Lock(string key, int acquisitionTimeout, int lockTimeout)
         {
             return _lock.Lock(this, key, acquisitionTimeout, lockTimeout);
 
@@ -33,7 +33,7 @@ namespace NHibernate.Caches.Redis
         /// </summary>
         /// <param name="key">global lock key</param>
         /// <param name="setLockValue">value that lock key was set to when it was locked</param>
-        public bool Unlock(string key, double setLockValue)
+        public bool Unlock(string key, long setLockValue)
         {
             return _lock.Unlock(this, key, setLockValue);
         }

@@ -57,7 +57,7 @@ namespace NHibernate.Caches.Redis
 
         protected readonly UTF8Encoding Encoding = new UTF8Encoding();
 
-        protected IDictionary<object, double> AcquiredLocks = new Dictionary<object,double>();
+        protected IDictionary<object, long> AcquiredLocks = new Dictionary<object,long>();
 
         static NhRedisClientBase()
         {

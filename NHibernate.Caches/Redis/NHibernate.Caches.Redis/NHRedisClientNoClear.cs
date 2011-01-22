@@ -295,7 +295,7 @@ namespace NHibernate.Caches.Redis
             bool rc;
             using (var disposable = new DisposablePooledClient(ClientManager))
             {
-                double lockExpire = disposable.Client.Lock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey), _lockAcquisitionTimeout, _lockTimeout);
+                long lockExpire = disposable.Client.Lock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey), _lockAcquisitionTimeout, _lockTimeout);
                 rc = (lockExpire != 0);
                 if (rc)
                     AcquiredLocks[key] = lockExpire;
