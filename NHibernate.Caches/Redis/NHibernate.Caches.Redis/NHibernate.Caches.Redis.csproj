@@ -62,7 +62,6 @@
     <Compile Include="NHRedisClientNoClear.cs" />
     <Compile Include="CustomRedisClient.cs" />
     <Compile Include="CustomRedisClientFactory.cs" />
-    <Compile Include="DisposablePooledClient.cs" />
     <Compile Include="NHRedisClient.cs" />
     <Compile Include="NHRedisException.cs" />
     <Compile Include="RedisConfig.cs" />

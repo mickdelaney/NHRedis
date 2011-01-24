@@ -294,7 +294,7 @@ namespace NHibernate.Caches.Redis
         /// <returns></returns>
         private IDictionary<object, T> HGetAllImpl<T>(object key, RedisNamespace redisNamespace)
         {
-            using (var disposable = new DisposablePooledClient(ClientManager))
+            using (var disposable = new DisposablePooledClient<CustomRedisClient>(ClientManager))
             {
                 var client = disposable.Client;
                 var members = client.HGetAll(redisNamespace.GlobalCacheKey(key));
@@ -321,7 +321,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="redisNamespace"></param>
         private void HSetImpl(object key, object field, object value, RedisNamespace redisNamespace)
         {
-            using (var disposable = new DisposablePooledClient(ClientManager))
+            using (var disposable = new DisposablePooledClient<CustomRedisClient>(ClientManager))
             {
                 var client = disposable.Client;
                 client.HSet(redisNamespace.GlobalCacheKey(key), GetFieldBytes(field), client.Serialize(value));
@@ -337,7 +337,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="redisNamespace"></param>
         private void HSetImpl<T>(object key, IDictionary<object, T> keyValues, RedisNamespace redisNamespace)
         {
-            using (var disposable = new DisposablePooledClient(ClientManager))
+            using (var disposable = new DisposablePooledClient<CustomRedisClient>(ClientManager))
             {
                 var client = disposable.Client;
                 var fieldBytes = new byte[keyValues.Count][];
@@ -366,7 +366,7 @@ namespace NHibernate.Caches.Redis
         /// <returns></returns>
         private bool HDelImpl(object key, object field, RedisNamespace redisNamespace)
         {
-            using (var disposable = new DisposablePooledClient(ClientManager))
+            using (var disposable = new DisposablePooledClient<CustomRedisClient>(ClientManager))
             {
                 var client = disposable.Client;
                 return client.HDel(redisNamespace.GlobalCacheKey(key), GetFieldBytes(field)) == 1;
