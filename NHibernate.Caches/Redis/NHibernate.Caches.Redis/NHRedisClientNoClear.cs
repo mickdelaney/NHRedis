@@ -85,7 +85,7 @@ namespace NHibernate.Caches.Redis
             object rc;
             try
             {
-                using (var disposable = new DisposablePooledClient<CustomRedisClient>(ClientManager))
+                using (var disposable = new PooledRedisClientManager.DisposablePooledClient<CustomRedisClient>(ClientManager))
                 {
                     var client = disposable.Client;
                     var maybeObj = client.Get(CacheNamespace.GlobalCacheKey(key));
@@ -120,7 +120,7 @@ namespace NHibernate.Caches.Redis
  
             try
             {
-                using (var disposable = new DisposablePooledClient<CustomRedisClient>(ClientManager))
+                using (var disposable = new PooledRedisClientManager.DisposablePooledClient<CustomRedisClient>(ClientManager))
                 {
                     var client = disposable.Client;
                     var globalKey = CacheNamespace.GlobalCacheKey(key);
@@ -164,7 +164,7 @@ namespace NHibernate.Caches.Redis
             IRedisPipeline pipe = null;
             try
             {
-                using (var disposable = new DisposablePooledClient<CustomRedisClient>(ClientManager))
+                using (var disposable = new PooledRedisClientManager.DisposablePooledClient<CustomRedisClient>(ClientManager))
                 {
                     var client = disposable.Client;
 
@@ -271,7 +271,7 @@ namespace NHibernate.Caches.Redis
             if (Log.IsDebugEnabled)
                 Log.DebugFormat("removing item {0}", key);
 
-            using (var disposable = new DisposablePooledClient<CustomRedisClient>(ClientManager))
+            using (var disposable = new PooledRedisClientManager.DisposablePooledClient<CustomRedisClient>(ClientManager))
             {
                 var client = disposable.Client;
                 using (var pipe = client.CreatePipeline())
@@ -293,7 +293,7 @@ namespace NHibernate.Caches.Redis
         public override bool Lock(object key)
         {
             bool rc;
-            using (var disposable = new DisposablePooledClient<CustomRedisClient>(ClientManager))
+            using (var disposable = new PooledRedisClientManager.DisposablePooledClient<CustomRedisClient>(ClientManager))
             {
                 long lockExpire = disposable.Client.Lock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey), _lockAcquisitionTimeout, _lockTimeout);
                 rc = (lockExpire != 0);
@@ -311,7 +311,7 @@ namespace NHibernate.Caches.Redis
         {
             if (!AcquiredLocks.ContainsKey(key))
                 return;
-            using (var disposable = new DisposablePooledClient<CustomRedisClient>(ClientManager))
+            using (var disposable = new PooledRedisClientManager.DisposablePooledClient<CustomRedisClient>(ClientManager))
             {
                 disposable.Client.Unlock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey), AcquiredLocks[key]);
                 AcquiredLocks.Remove(key);
@@ -326,7 +326,7 @@ namespace NHibernate.Caches.Redis
         public override IDictionary MultiGet(IEnumerable keys)
         {
             var rc = new Dictionary<object, object>();
-            using (var disposable = new DisposablePooledClient<CustomRedisClient>(ClientManager))
+            using (var disposable = new PooledRedisClientManager.DisposablePooledClient<CustomRedisClient>(ClientManager))
             {
                 var client = disposable.Client;
                 var globalKeys = new List<string>();
