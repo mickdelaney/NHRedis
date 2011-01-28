@@ -30,6 +30,7 @@ using System.Text;
 using NHibernate.Cache.Query;
 using ServiceStack.Redis;
 using NHibernate.Cache;
+using ServiceStack.Redis.Support.Queue.Implementation;
 
 namespace NHibernate.Caches.Redis
 {
@@ -131,7 +132,7 @@ namespace NHibernate.Caches.Redis
                     _clientManager = new PooledRedisClientManager(new List<string>() { Config.Host },
                                                     new List<string>(), poolConfig)
                                          {
-                                             RedisClientFactory = new CustomRedisClientFactory()
+                                             RedisClientFactory = new SerializingRedisClientFactory()
                                          };
                 }
                 if (_garbageCollector == null)

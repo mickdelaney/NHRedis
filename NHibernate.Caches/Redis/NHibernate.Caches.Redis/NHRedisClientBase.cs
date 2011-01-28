@@ -33,6 +33,7 @@ using ServiceStack.Redis;
 using NHibernate.Cache;
 using ServiceStack.Redis.Pipeline;
 using ServiceStack.Redis.Support;
+using ServiceStack.Redis.Support.Queue.Implementation;
 
 
 namespace NHibernate.Caches.Redis
@@ -95,7 +96,7 @@ namespace NHibernate.Caches.Redis
             CacheNamespace = new RedisNamespace(namespacePrefix);
 
         }
- 
+
         /// <summary>
         /// New cache item. Null return indicates that we are not allowed to update the cache, due to versioning
         /// </summary>
@@ -103,7 +104,19 @@ namespace NHibernate.Caches.Redis
         /// <param name="scratchItems"></param>
         /// <param name="client"></param>
         /// <returns></returns>
-        public IList<ScratchCacheItem> GenerateNewCacheItems(byte[][] currentItemsRaw, IList<ScratchCacheItem> scratchItems, CustomRedisClient client)
+        public IList<ScratchCacheItem> GenerateNewCacheItems(byte[][] currentItemsRaw, IList<ScratchCacheItem> scratchItems)
+        {
+            return GenerateNewCacheItems(currentItemsRaw, scratchItems, default(SerializingRedisClient));
+        }
+
+        /// <summary>
+        /// New cache item. Null return indicates that we are not allowed to update the cache, due to versioning
+        /// </summary>
+        /// <param name="currentItemsRaw"></param>
+        /// <param name="scratchItems"></param>
+        /// <param name="client"></param>
+        /// <returns></returns>
+        public IList<ScratchCacheItem> GenerateNewCacheItems(byte[][] currentItemsRaw, IList<ScratchCacheItem> scratchItems, SerializingRedisClient client)
         {
             if (currentItemsRaw.Length != scratchItems.Count)
                 throw new NHRedisException();
@@ -270,7 +283,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="entityCacheKey"></param>
         /// <param name="client"></param>
         /// <param name="pipe"></param>
-        protected void QueueDeleteAll(object entityCacheKey, CustomRedisClient client, IRedisQueueableOperation pipe)
+        protected void QueueDeleteAll(object entityCacheKey, SerializingRedisClient client, IRedisQueueableOperation pipe)
         {
             //entityCacheKey represents non-global key from entity cache
             // must convert to live query field
@@ -294,7 +307,7 @@ namespace NHibernate.Caches.Redis
         /// <returns></returns>
         private IDictionary<object, T> HGetAllImpl<T>(object key, RedisNamespace redisNamespace)
         {
-            using (var disposable = new PooledRedisClientManager.DisposablePooledClient<CustomRedisClient>(ClientManager))
+            using (var disposable = new PooledRedisClientManager.DisposablePooledClient<SerializingRedisClient>(ClientManager))
             {
                 var client = disposable.Client;
                 var members = client.HGetAll(redisNamespace.GlobalCacheKey(key));
@@ -321,7 +334,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="redisNamespace"></param>
         private void HSetImpl(object key, object field, object value, RedisNamespace redisNamespace)
         {
-            using (var disposable = new PooledRedisClientManager.DisposablePooledClient<CustomRedisClient>(ClientManager))
+            using (var disposable = new PooledRedisClientManager.DisposablePooledClient<SerializingRedisClient>(ClientManager))
             {
                 var client = disposable.Client;
                 client.HSet(redisNamespace.GlobalCacheKey(key), GetFieldBytes(field), client.Serialize(value));
@@ -337,7 +350,7 @@ namespace NHibernate.Caches.Redis
         /// <param name="redisNamespace"></param>
         private void HSetImpl<T>(object key, IDictionary<object, T> keyValues, RedisNamespace redisNamespace)
         {
-            using (var disposable = new PooledRedisClientManager.DisposablePooledClient<CustomRedisClient>(ClientManager))
+            using (var disposable = new PooledRedisClientManager.DisposablePooledClient<SerializingRedisClient>(ClientManager))
             {
                 var client = disposable.Client;
                 var fieldBytes = new byte[keyValues.Count][];
@@ -366,7 +379,7 @@ namespace NHibernate.Caches.Redis
         /// <returns></returns>
         private bool HDelImpl(object key, object field, RedisNamespace redisNamespace)
         {
-            using (var disposable = new PooledRedisClientManager.DisposablePooledClient<CustomRedisClient>(ClientManager))
+            using (var disposable = new PooledRedisClientManager.DisposablePooledClient<SerializingRedisClient>(ClientManager))
             {
                 var client = disposable.Client;
                 return client.HDel(redisNamespace.GlobalCacheKey(key), GetFieldBytes(field)) == 1;
@@ -395,7 +408,7 @@ namespace NHibernate.Caches.Redis
                     pipe.QueueCommand(
                         r => ((IRedisNativeClient)r).SAdd(
                                  _liveQueryCacheNamespace.GlobalCacheKey(key.Key),
-                                 ((CustomRedisClient)r).Serialize(queryCacheable)));
+                                 ((SerializingRedisClient)r).Serialize(queryCacheable)));
                 }
                 else if (handleRemove)
                 {
@@ -403,7 +416,7 @@ namespace NHibernate.Caches.Redis
                     pipe.QueueCommand(
                         r => ((IRedisNativeClient)r).SRem(
                                  _liveQueryCacheNamespace.GlobalCacheKey(key.Key),
-                                 ((CustomRedisClient)r).Serialize(queryCacheable)));
+                                 ((SerializingRedisClient)r).Serialize(queryCacheable)));
                 }
             }*/
 
