@@ -31,11 +31,6 @@ using System.Threading;
 using Iesi.Collections;
 using log4net.Config;
 using NHibernate.Cache;
-using NHibernate.Cache.Entry;
-using NHibernate.Cache.Query;
-using NHibernate.Engine;
-using NHibernate.SqlCommand;
-using NHibernate.Util;
 using NUnit.Framework;
 
 namespace NHibernate.Caches.Redis.Tests
@@ -44,30 +39,6 @@ namespace NHibernate.Caches.Redis.Tests
 	{
 		protected Dictionary<string, string> _props;
 		protected ICacheProvider _provider;
-
-        public class TestInMemoryQuery : IInMemoryQuery
-        {
-            public override object[] Projection(object entity)
-            {
-                return null;
-            }
-        }
-
-        public class TestInMemoryQueryProvider : IInMemoryQueryProvider
-	    {
-            private readonly IThreadSafeDictionary<QueryKey, IInMemoryQuery> _queries = new ThreadSafeDictionary<QueryKey, IInMemoryQuery>();
-
-            public TestInMemoryQueryProvider()
-            {
-                var qk = new QueryKey(null, new SqlString("1=1"), new QueryParameters(), new HashedSet());
-                _queries[qk] = new TestInMemoryQuery();
-            }
-
-            public IThreadSafeDictionary<QueryKey, IInMemoryQuery> GetQueries()
-            {
-                return _queries;
-            }
-	    }
 
 		[TestFixtureSetUp]
 		public virtual void FixtureSetup()
@@ -95,11 +66,11 @@ namespace NHibernate.Caches.Redis.Tests
 			var key = "key1";
 			var value = "value";
 
-			var cache = _provider.BuildCache("nunit", new TestInMemoryQueryProvider(), null, _props);
+			var cache = _provider.BuildCache("nunit", _props);
 			Assert.IsNotNull(cache, "no cache returned");
 
 			// add the item
-			cache.Put(new CachePutParameters(null, key, value) );
+			cache.Put(key, value );
 			Thread.Sleep(1000);
 
 			// make sure it's there
@@ -138,8 +109,8 @@ namespace NHibernate.Caches.Redis.Tests
 		[Test]
 		public void TestNullKeyGet()
 		{
-            var cache = _provider.BuildCache("nunit", new TestInMemoryQueryProvider(), null, _props);
-			cache.Put(new CachePutParameters(null, "nunit", "value") );
+            var cache = _provider.BuildCache("nunit", _props);
+			cache.Put("nunit", "value");
 			Thread.Sleep(1000);
 			var item = cache.Get(null);
 			Assert.IsNull(item);
@@ -149,7 +120,7 @@ namespace NHibernate.Caches.Redis.Tests
 		public void TestNullKeyPut()
 		{
             ICache cache = new NhRedisClient();
-			Assert.Throws<ArgumentNullException>(() => cache.Put(new CachePutParameters()));
+			Assert.Throws<ArgumentNullException>(() => cache.Put(null, null));
 		}
 
 		[Test]
@@ -163,7 +134,7 @@ namespace NHibernate.Caches.Redis.Tests
 		public void TestNullValuePut()
 		{
             ICache cache = new NhRedisClient();
-			Assert.Throws<ArgumentNullException>(() => cache.Put(new CachePutParameters(null, "nunit", null) ));
+			Assert.Throws<ArgumentNullException>(() => cache.Put("nunit", null ));
 		}
 
         [Serializable]
@@ -183,256 +154,17 @@ namespace NHibernate.Caches.Redis.Tests
             }
 
         }
-        
-        [Test]
-        public void TestHSet()
-        {
-            var key = "key";
-            var field = "foo";
-            var value = new LiveQueryCacheEntry("value",1,null);
-            var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
-            Assert.IsFalse(cache.HDel(key, field));
-            cache.HSet(key, field, value);
-            Assert.IsTrue(cache.HDel(key, field));
-        }
-
-        [Test]
-        public void TestHSetMultiple()
-        {
-            var key = "key";
-
-            var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
-            var members = cache.HGetAll(key);
-            foreach (var entry in members)
-            {
-                cache.HDel(key, entry.Key); 
-            }
-
-
-            var keyValues = new Dictionary<object, LiveQueryCacheEntry>();
-            keyValues["field1"] = new LiveQueryCacheEntry("value1", 1, null);
-            keyValues["field2"] = new LiveQueryCacheEntry("value2", 2, null);
-            foreach (var entry in keyValues)
-            {
-                Assert.IsFalse(cache.HDel(key, entry.Key));
-            }
-
-            cache.HSet(key, keyValues);
-            members = cache.HGetAll(key);
-            foreach (var entry in members)
-            {
-                Assert.IsTrue(cache.HDel(key, entry.Key));
-                Assert.AreEqual(keyValues[entry.Key], entry.Value);
-            }
-        }
-
-        
-        [Test]
-        public void TestHGetAll()
-        {
-            var cache = _provider.BuildLiveQueryCache(typeof(String).FullName, _props);
-
-            var key = "keykey";
-            var members = cache.HGetAll(key);
-            foreach (var member in members)
-            {
-                cache.HDel(key, member.Key);
-            }
-
-            var keyValues = new Dictionary<object, LiveQueryCacheEntry>();
-            keyValues["field1"] = new LiveQueryCacheEntry("value1", 1, new SimpleComparer());
-            keyValues["field2"] = new LiveQueryCacheEntry("value2", 2, new SimpleComparer());
-            cache.HSet(key, keyValues);
-
-            members = cache.HGetAll(key);
-
-            var fields = new ArrayList()
-                                    {
-                                        "field1", "field2"
-                                    };
-            var vals = new ArrayList()
-                                    {
-                                        "value1", "value2"
-                                    };
-            foreach (var member in members)
-            {
-                Assert.IsTrue(fields.Contains(member.Key));
-                Assert.IsTrue(vals.Contains(member.Value.Value)); 
-            }
-         }
-
-	    [Test]
-        public void TestMultiGet()
-        {
-            var cache = _provider.BuildCache(typeof(String).FullName, new TestInMemoryQueryProvider(), null, _props);
-
-            List<string> keys = new List<string>()
-                                    {
-                                        "key1", "key2", "key3"
-                                    };
-
-
-            List<string> vals = new List<string>()
-                                    {
-                                        "value1", "value2", "value3"
-                                    };
-            for (int i = 0; i < keys.Count; ++i )
-                cache.Put(new CachePutParameters(null, keys[i], vals[i]));
-
-            IDictionary pre = cache.MultiGet(keys);
-            for (int i = 0; i < keys.Count; ++i)
-            {
-                Assert.IsTrue(pre.Contains(keys[i]));
-                Assert.AreEqual(vals[i], pre[keys[i]]);
-            }
-
-            //test with "expired" key - at index 1
-            cache.Remove(keys[1]);
-            pre = cache.MultiGet(keys);
-            keys.RemoveAt(1);
-            vals.RemoveAt(1);
-            for (int i = 0; i < keys.Count; ++i)
-            {
-                Assert.IsTrue(pre.Contains(keys[i]));
-                Assert.AreEqual(vals[i], pre[keys[i]]);
-            }
-
-        }
-
-	    [Test]
-        public void TestVersionedPut()
-        {
-            const string key1 = "key1";
-
-            var comparer = new SimpleComparer();
-            var cache = _provider.BuildCache(typeof(String).FullName, new TestInMemoryQueryProvider(), CacheFactory.ReadWriteCow, _props);
-
-            int version1 = 1;
-            string value1 = "value1";
-
-            int version2 = 2;
-            string value2 = "value2";
-
-            int version3 = 3;
-            string value3 = "value3";
-
-            cache.Remove(key1);
-
-
-            //check if object is cached correctly
-            var versionParams =
-	        new CacheVersionedPutParameters()
-	            {
-	                Key = key1,
-	                Value = value1,
-	                Version = version1,
-	                VersionComparer = comparer
-	            };
-	        var list = new List<CacheVersionedPutParameters> {versionParams};
-            cache.Put(list);
-            var obj = cache.Get(key1) as LockableCachedItem;
-            Assert.AreEqual(obj.Value, value1);
-
-	        versionParams.Value = value2;
-	        versionParams.Version = version2;
-            // check that object changes with next version
-            cache.Put(list);
-            obj = cache.Get(key1) as LockableCachedItem;
-            Assert.AreEqual(obj.Value, value2);
-
-            // check that older version does not change cache
-            versionParams.Value = value3;
-            versionParams.Version = version1;
-            cache.Put(list);
-            obj = cache.Get(key1) as LockableCachedItem;
-            Assert.AreEqual(obj.Value, value2);
-
-
-        }
-
-        [Test]
-        public void TestVersionedPutMultiple()
-        {
-            var comparer = new SimpleComparer();
-            var cache = _provider.BuildCache(typeof(String).FullName, new TestInMemoryQueryProvider(), CacheFactory.ReadWriteCow, _props);
-
-            // test put on list
-            var keys = new[] { "key1", "key2", "key3" };
-            var values = new[] { "value1", "value2", "value3" };
-            var versions = new[] { 1, 2, 3 };
-
-            foreach (var k in keys)
-                cache.Remove(k);
-            var list = new List<CacheVersionedPutParameters>(3);
-            for (int i = 0; i < 3; ++i)
-                list.Add(new CacheVersionedPutParameters()
-                {
-                    Key = keys[i],
-                    Value = values[i],
-                    Version = versions[i],
-                    VersionComparer = comparer
-                });
-
-            cache.Put(list);
-
-            for (int i = 0; i < 3; ++i)
-            {
-                var res = cache.Get(keys[i]) as LockableCachedItem;
-                Assert.AreEqual(res.Value, values[i]);
-                Assert.AreEqual(res.Version, versions[i]);
-            }
-        }
-
-	    [Test]
-		public void TestPut()
-		{
-			const string key = "key1";
-			const string value = "value";
-
-            var cache = _provider.BuildCache("nunit", new TestInMemoryQueryProvider(), CacheFactory.ReadWriteCow, _props);
-			Assert.IsNotNull(cache, "no cache returned");
-
-			Assert.IsNull(cache.Get(key), "cache returned an item we didn't add !?!");
-
-			cache.Put(new CachePutParameters(null, key, value) );
-			Thread.Sleep(1000);
-			var item = cache.Get(key);
-			Assert.IsNotNull(item);
-			Assert.AreEqual(value, item, "didn't return the item we added");
-		}
-   /*     [Test]
-        public virtual void TestLock()
-        {
-
-            ICache cache = _provider.BuildCache(null, new TestInMemoryQueryProvider(), CacheFactory.ReadWriteCow, _props);
-            Assert.IsNotNull(cache, "no cache returned");
-
-            string key = "key1";
-
-            Assert.IsTrue(cache.Lock(key));
-
-            //can't re-lock
-            Assert.IsFalse(cache.Lock(key));
-
-            cache.Unlock(key);
-
-            //can now lock
-            Assert.IsTrue(cache.Lock(key));
-
-            //cleanup
-            cache.Unlock(key);
-
-        }*/
-		[Test]
+     
+ [Test]
 		public void TestRegions()
 		{
 			const string key = "key";
-            var cache1 = _provider.BuildCache("nunit1", new TestInMemoryQueryProvider(), CacheFactory.ReadWriteCow, _props);
-            var cache2 = _provider.BuildCache("nunit2", new TestInMemoryQueryProvider(), CacheFactory.ReadWriteCow, _props);
+            var cache1 = _provider.BuildCache("nunit1", _props);
+            var cache2 = _provider.BuildCache("nunit2", _props);
 			const string s1 = "test1";
 			const string s2 = "test2";
-			cache1.Put(new CachePutParameters(null, key, s1) );
-			cache2.Put(new CachePutParameters(null, key, s2) );
+			cache1.Put( key, s1 );
+			cache2.Put( key, s2 );
 			Thread.Sleep(1000);
 			var get1 = cache1.Get(key);
 			var get2 = cache2.Get(key);
@@ -445,11 +177,11 @@ namespace NHibernate.Caches.Redis.Tests
 			const string key = "key1";
 			const string value = "value";
 
-            var cache = _provider.BuildCache("nunit", new TestInMemoryQueryProvider(), CacheFactory.ReadWriteCow, _props);
+            var cache = _provider.BuildCache("nunit", _props);
 			Assert.IsNotNull(cache, "no cache returned");
 
 			// add the item
-			cache.Put(new CachePutParameters(null, key, value));
+			cache.Put(key, value);
 			Thread.Sleep(1000);
 
 			// make sure it's there

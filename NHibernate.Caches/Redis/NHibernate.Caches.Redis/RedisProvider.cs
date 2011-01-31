@@ -27,7 +27,6 @@
 using System.Collections.Generic;
 using System.Configuration;
 using System.Text;
-using NHibernate.Cache.Query;
 using ServiceStack.Redis;
 using NHibernate.Cache;
 using ServiceStack.Redis.Support.Queue.Implementation;
@@ -65,7 +64,7 @@ namespace NHibernate.Caches.Redis
 
 		#region ICacheProvider Members
 
-		public ICache BuildCache(string regionName, IInMemoryQueryProvider inMemoryQueryProvider, string cacheConcurrencyStrategy, IDictionary<string, string> properties)
+		public ICache BuildCache(string regionName, IDictionary<string, string> properties)
 		{
 			if (regionName == null)
 			{
@@ -94,14 +93,10 @@ namespace NHibernate.Caches.Redis
                 noClearClient = properties[NoClearPropertyKey] == "true";
           
             if (noClearClient)
-                return new NhRedisClientNoClear(regionName,inMemoryQueryProvider, cacheConcurrencyStrategy, properties, _clientManager);
-            return new NhRedisClient(regionName, inMemoryQueryProvider,cacheConcurrencyStrategy, properties, _clientManager);
+                return new NhRedisClientNoClear(regionName, null, properties, _clientManager);
+            return new NhRedisClient(regionName, null, properties, _clientManager);
 		}
 
-        public ILiveQueryCache BuildLiveQueryCache(string regionName, IDictionary<string, string> properties)
-        {
-            return BuildCache(regionName, null, null, properties) as ILiveQueryCache;
-        }		
 
 		public long NextTimestamp()
 		{

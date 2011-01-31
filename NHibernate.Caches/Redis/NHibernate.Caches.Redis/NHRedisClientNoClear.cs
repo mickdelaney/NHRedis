@@ -27,9 +27,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using NHibernate.Cache.Query;
 using ServiceStack.Redis;
-using NHibernate.Cache;
 using ServiceStack.Redis.Pipeline;
 using ServiceStack.Redis.Support;
 using ServiceStack.Redis.Support.Queue.Implementation;
@@ -57,7 +55,7 @@ namespace NHibernate.Caches.Redis
         }
 
         public NhRedisClientNoClear(string regionName, IDictionary<string, string> properties)
-            : this(regionName, null, null, properties, null)
+            : this(regionName, null, properties, null)
         {
         }
         /// <summary>
@@ -66,8 +64,8 @@ namespace NHibernate.Caches.Redis
         /// <param name="regionName"></param>
         /// <param name="properties"></param>
         /// <param name="manager"></param>
-        public NhRedisClientNoClear(string regionName, IInMemoryQueryProvider inMemoryQueryProvider, string cacheConcurrencyStrategy, IDictionary<string, string> properties, PooledRedisClientManager manager)
-            : base(regionName, inMemoryQueryProvider, cacheConcurrencyStrategy, properties,manager)
+        public NhRedisClientNoClear(string regionName, string cacheConcurrencyStrategy, IDictionary<string, string> properties, PooledRedisClientManager manager)
+            : base(regionName, cacheConcurrencyStrategy, properties,manager)
         {
         }
         #region ICache Members
@@ -101,12 +99,17 @@ namespace NHibernate.Caches.Redis
             return rc;
         }
 
- 
+        public override void Put(object key, object value)
+        {
+            Put(new CachePutParameters(null, key, value));
+        }
+
+
         /// <summary>
         /// 
         /// </summary>
         /// <param name="putParameters"></param>
-        public override void Put(CachePutParameters putParameters)
+        public void Put(CachePutParameters putParameters)
         {
             var key = putParameters.Key;
             var value = putParameters.Value;
@@ -130,8 +133,6 @@ namespace NHibernate.Caches.Redis
                     {
                         pipe.QueueCommand(r => ((IRedisNativeClient)r).SetEx(globalKey, _expiry, client.Serialize(value)));
                      
-                        QueueLiveQueryUpdates(putParameters, key, pipe, false);
-
                         pipe.Flush();
                     }
                 }
@@ -148,7 +149,7 @@ namespace NHibernate.Caches.Redis
         /// the cache
         /// </summary>
         /// <param name="putParameters"></param>
-        public override void Put(IList<CacheVersionedPutParameters> putParameters)
+        public void Put(IList<CacheVersionedPutParameters> putParameters)
         {
             //deal with null keys
             IList<ScratchCacheItem> scratchItems = new List<ScratchCacheItem>();
@@ -200,8 +201,7 @@ namespace NHibernate.Caches.Redis
                                     CacheNamespace.GlobalCacheKey(item.PutParameters.Key),
                                     _expiry, client.Serialize(item.NewCacheValue) ));
 
-                            // update live query cache
-                            QueueLiveQueryUpdates(scratch.PutParameters, scratch.PutParameters.Key, trans, true);
+                         
                         }
                         success = trans.Commit();
                     }
@@ -279,8 +279,6 @@ namespace NHibernate.Caches.Redis
                 {
                       //watch for changes to cache keys
                     pipe.QueueCommand(r => ((RedisNativeClient)r).Del(CacheNamespace.GlobalCacheKey(key)));
-
-                    QueueDeleteAll(key, client, pipe);
                  
                     pipe.Flush();
                 }
@@ -291,17 +289,15 @@ namespace NHibernate.Caches.Redis
         /// 
         /// </summary>
         /// <param name="key"></param>
-        public override bool Lock(object key)
+        public override void Lock(object key)
         {
-            bool rc;
             using (var disposable = new PooledRedisClientManager.DisposablePooledClient<SerializingRedisClient>(ClientManager))
             {
                 long lockExpire = disposable.Client.Lock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey), _lockAcquisitionTimeout, _lockTimeout);
-                rc = (lockExpire != 0);
+                bool rc = (lockExpire != 0);
                 if (rc)
                     AcquiredLocks[key] = lockExpire;
             }
-            return rc;
         }
 
         /// <summary>

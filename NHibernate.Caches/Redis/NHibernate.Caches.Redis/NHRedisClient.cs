@@ -28,8 +28,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using ServiceStack.Redis;
-using NHibernate.Cache.Query;
-using NHibernate.Cache;
 using ServiceStack.Redis.Pipeline;
 using ServiceStack.Redis.Support;
 using ServiceStack.Redis.Support.Queue.Implementation;
@@ -58,7 +56,7 @@ namespace NHibernate.Caches.Redis
 		}
 
 		public NhRedisClient(string regionName, IDictionary<string, string> properties)
-			: this(regionName, null,  null, properties, null)
+			: this(regionName, null,  properties, null)
 		{
 		}
         /// <summary>
@@ -67,8 +65,8 @@ namespace NHibernate.Caches.Redis
         /// <param name="regionName"></param>
         /// <param name="properties"></param>
         /// <param name="manager"></param>
-        public NhRedisClient(string regionName, IInMemoryQueryProvider inMemoryQueryProvider, string cacheConcurrencyStrategy, IDictionary<string, string> properties, PooledRedisClientManager manager)
-            : base(regionName, inMemoryQueryProvider, cacheConcurrencyStrategy, properties,manager)
+        public NhRedisClient(string regionName, string cacheConcurrencyStrategy, IDictionary<string, string> properties, PooledRedisClientManager manager)
+            : base(regionName,  cacheConcurrencyStrategy, properties,manager)
 		{
             //make sure generation is synched with server
             SynchGeneration();
@@ -135,13 +133,18 @@ namespace NHibernate.Caches.Redis
             }
 		    return rc;
 		}
-      
+
+        public override void Put(object key, object value)
+        {
+            Put(new CachePutParameters(null, key, value));
+        }
+
         /// <summary>
         /// 
         /// </summary>
         /// <param name="key"></param>
         /// <param name="value"></param>
-        public override void Put(CachePutParameters putParameters)
+        public void Put(CachePutParameters putParameters)
 		{
             var key = putParameters.Key;
             var value = putParameters.Value;
@@ -203,7 +206,7 @@ namespace NHibernate.Caches.Redis
         /// the cache
         /// </summary>
         /// <param name="putParameters"></param>
-        public override void Put(IList<CacheVersionedPutParameters> putParameters)
+        public void Put(IList<CacheVersionedPutParameters> putParameters)
         {
             //deal with null keys
             IList<ScratchCacheItem> scratchItems = new List<ScratchCacheItem>();
@@ -412,49 +415,8 @@ namespace NHibernate.Caches.Redis
         /// 
         /// </summary>
         /// <param name="key"></param>
-        public override bool Lock(object key)
+        public override void Lock(object key)
         {
-
-          //BROKEN /////////////////////////////////////
-          /*  IRedisPipeline pipe = null;
-            bool rc = false;
-            try
-            {
-                using (var disposable = new PooledRedisClientManager.DisposablePooledClient<SerializingRedisClient>(ClientManager))
-                {
-                    var client = disposable.Client;
-                    long generationFromServer = CacheNamespace.GetGeneration();
-                    pipe = client.CreatePipeline();
-
-                    pipe.QueueCommand(
-                        r =>
-                        ((SerializingRedisClient)r).Lock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey), _lockAcquisitionTimeout, _lockTimeout),
-                            x => rc = (x != 0));
-                    pipe.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()),
-                                      x => generationFromServer = Convert.ToInt64(x));
-                    pipe.Flush();
-
-                    while (generationFromServer != CacheNamespace.GetGeneration())
-                    {
-                        //update cached generation value, and try again
-                        CacheNamespace.SetGeneration(generationFromServer);
-
-                        pipe.Replay();
-                    }
-                }
-            }
-            catch (Exception)
-            {
-                Log.WarnFormat("could not acquire lock for key: {0}", key);
-                throw;
-            }
-            finally
-            {
-                if (pipe != null)
-                    pipe.Dispose();
-            }
-            return rc;*/
-            return false;
         }
 
         /// <summary>
@@ -463,43 +425,6 @@ namespace NHibernate.Caches.Redis
         /// <param name="key"></param>
         public override void Unlock(object key)
         {
-            if (!AcquiredLocks.ContainsKey(key))
-                return;
-            IRedisPipeline pipe = null;
-            try
-            {
-                using (var disposable = new PooledRedisClientManager.DisposablePooledClient<SerializingRedisClient>(ClientManager))
-                {
-                    var client = disposable.Client;
-                    long generationFromServer = CacheNamespace.GetGeneration();
-                    pipe = client.CreatePipeline();
-
-                    pipe.QueueCommand(
-                        r =>
-                        ((SerializingRedisClient)r).Unlock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey), AcquiredLocks[key]));
-                    pipe.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()),
-                                      x => generationFromServer = Convert.ToInt64(x));
-                    pipe.Flush();
-
-                    while (generationFromServer != CacheNamespace.GetGeneration())
-                    {
-                        //update cached generation value, and try again
-                        CacheNamespace.SetGeneration(generationFromServer);
-
-                        pipe.Replay();
-                    }
-                }
-            }
-            catch (Exception)
-            {
-                Log.WarnFormat("could not release lock for key: {0}", key);
-                throw;
-            }
-            finally
-            {
-                if (pipe != null)
-                    pipe.Dispose();
-            }
         }
 
         /// <summary>

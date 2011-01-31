@@ -1,4 +1,4 @@
-#region License
+﻿#region License
 
 //
 //  NHRedis - A cache provider for NHibernate using the .NET client
@@ -24,32 +24,39 @@
 
 #endregion
 
-using System.Collections.Generic;
-using System.Threading;
-using log4net.Config;
-using NHibernate.Cache;
-using NUnit.Framework;
+﻿using System.Collections;
 
-namespace NHibernate.Caches.Redis.Tests
+namespace NHibernate.Caches.Redis
 {
-    public class NhRedisClientNoClearFixture : NhRedisClientFixture
+    public class CacheVersionedPutParameters : CachePutParameters
     {
-        private readonly int _lockTimeout = 2;
-        [TestFixtureSetUp]
-        public void FixtureSetup()
+        public CacheVersionedPutParameters()
         {
-            XmlConfigurator.Configure();
-            _props = new Dictionary<string, string> {{RedisProvider.NoClearPropertyKey, "true"}, 
-                                                     {AbstractCache.ExpirationPropertyKey, "20"},
-                                                    {AbstractCache.LockAcquisitionTimeoutPropertyKey, "1"},
-                                                     {AbstractCache.LockTimeoutPropertyKey, _lockTimeout.ToString()}
-            };
-            _provider = new RedisProvider();
-            _provider.Start(_props);
+
         }
-        [Test]
-        public override void TestClear()
+        public CacheVersionedPutParameters(object cacheObject, object key, object value, object version, IComparer versionComparator)
+            : base(cacheObject, key, value)
         {
+            Version = version;
+            VersionComparer = versionComparator;
+        }
+        public object Version
+        {
+            get;
+            set;
+        }
+        public IComparer VersionComparer
+        {
+            get;
+            set;
+        }
+        public override string ToString()
+        {
+            return "CacheVersionedPutParameters: {key= " + Key +
+                   ", value= " + Value +
+                   ", hydrated object= " + HydratedObject +
+                   ", version= " + Version +
+                   "}";
         }
     }
 }
