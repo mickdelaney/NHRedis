@@ -28,33 +28,23 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using ServiceStack.Redis;
+using NHibernate.Cache.Query;
 using NHibernate.Cache;
 using ServiceStack.Redis.Pipeline;
-using Environment = NHibernate.Cfg.Environment;
+using ServiceStack.Redis.Support;
+using ServiceStack.Redis.Support.Queue.Implementation;
+
 
 namespace NHibernate.Caches.Redis
 {
     /// <summary>
     /// Redis cache client for Redis.
     /// </summary>
-	public class NhRedisClient : ICache
+	public class NhRedisClient : NhRedisClientBase
 	{
-		private static readonly IInternalLogger Log;
-        private readonly PooledRedisClientManager _clientManager;
-		private readonly int _expiry;
-
-        // NHibernate settings for cache _region and prefix
-		private readonly string _region;
-		private readonly string _regionPrefix;
-
-        // manage cache _region        
-        private readonly RedisNamespace _cacheNamespace;
-
-        private byte[] _bytesToCache;
-
    		static NhRedisClient()
 		{
-			Log = LoggerProvider.LoggerFor(typeof (RedisClient));
+            Log = LoggerProvider.LoggerFor(typeof(NhRedisClient));
  		}
 
 		public NhRedisClient()
@@ -68,7 +58,7 @@ namespace NHibernate.Caches.Redis
 		}
 
 		public NhRedisClient(string regionName, IDictionary<string, string> properties)
-			: this(regionName, properties, null)
+			: this(regionName, null,  null, properties, null)
 		{
 		}
         /// <summary>
@@ -77,49 +67,14 @@ namespace NHibernate.Caches.Redis
         /// <param name="regionName"></param>
         /// <param name="properties"></param>
         /// <param name="manager"></param>
-        public NhRedisClient(string regionName, IDictionary<string, string> properties, PooledRedisClientManager manager)
+        public NhRedisClient(string regionName, IInMemoryQueryProvider inMemoryQueryProvider, string cacheConcurrencyStrategy, IDictionary<string, string> properties, PooledRedisClientManager manager)
+            : base(regionName, inMemoryQueryProvider, cacheConcurrencyStrategy, properties,manager)
 		{
-			_region = regionName;
-            var namespacePrefix = _region;
-
-            _clientManager = manager;
-			_expiry = 300;
-
-			if (properties != null)
-			{
-				var expirationString = GetExpirationString(properties);
-				if (expirationString != null)
-				{
-					_expiry = Convert.ToInt32(expirationString);
-					if (Log.IsDebugEnabled)
-					{
-						Log.DebugFormat("using expiration of {0} seconds", _expiry);
-					}
-				}
-
-				if (properties.ContainsKey("_regionPrefix"))
-				{
-					_regionPrefix = properties["_regionPrefix"];
-                    if (_regionPrefix != null && !_regionPrefix.Equals(""))
-                        namespacePrefix = _regionPrefix + "_" + _region;
-					if (Log.IsDebugEnabled)
-					{
-						Log.DebugFormat("new _regionPrefix :{0}", _regionPrefix);
-					}
-        		}
-				else
-				{
-                   	if (Log.IsDebugEnabled)
-					{
-						Log.Debug("no _regionPrefix value given, using defaults");
-					}
-				}
-			}
-            _cacheNamespace = new RedisNamespace(namespacePrefix);
-
             //make sure generation is synched with server
             SynchGeneration();
+
 		}
+
 
 		#region ICache Members
         /// <summary>
@@ -127,55 +82,56 @@ namespace NHibernate.Caches.Redis
         /// </summary>
         /// <param name="key"></param>
         /// <returns></returns>
-		public object Get(object key)
+        public override object Get(object key)
 		{
 			if (key == null)
-			{
 				return null;
-			}
 			if (Log.IsDebugEnabled)
-			{
 				Log.DebugFormat("fetching object {0} from the cache", key);
-			}
-            byte[] maybeObj = null;
-		    object rc = null;
 
+            byte[] maybeObj = null;
+		    object rc;
+            IRedisPipeline pipe = null;
             try
             {
-                using (var disposable = new DisposableClient(_clientManager))
+                using (var disposable = new PooledRedisClientManager.DisposablePooledClient<SerializingRedisClient>(ClientManager))
                 {
-                    CustomRedisClient client = disposable.Client;
+                    var client = disposable.Client;
                     //do transactioned get of generation and value
                     //if it succeeds, and null is returned, then either the key doesn't exist or
                     // our generation is out of date. In the latter case , update generation and try
                     // again.
-                    var generationFromServer = GetGeneration();
-                    while (true)
+                    long generationFromServer = CacheNamespace.GetGeneration();
+                    pipe = client.CreatePipeline();
+                  
+                    pipe.QueueCommand(r => ((RedisNativeClient) r).Get(CacheNamespace.GlobalCacheKey(key)),
+                                       x => maybeObj = x);
+                    pipe.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()),
+                                       x => generationFromServer = Convert.ToInt64(x));
+                    pipe.Flush();
+                   
+                    while (generationFromServer != CacheNamespace.GetGeneration())
                     {
-                        using (var trans = ((RedisClient) client).CreateTransaction())
-                        {
-                            trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
-                                               x => generationFromServer = Convert.ToInt32(x));
-                            trans.QueueCommand(r => ((RedisNativeClient) r).Get(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey)),
-                                               x => maybeObj = x);
-                            trans.Commit();
-                        }
-                        if (generationFromServer != GetGeneration())
-                        {
-                            //update cached generation value, and try again
-                            _cacheNamespace.SetGeneration(generationFromServer);
-                        }
-                        else
-                            break;
+                        //update cached generation value, and try again
+                        CacheNamespace.SetGeneration(generationFromServer);
+
+                        pipe.Replay();
                     }
-                    rc = maybeObj == null ? null : client.Deserialize(maybeObj);
+      
+                    rc = client.Deserialize(maybeObj);
                 }
 
             }
             catch (Exception)
             {
+ 
                 Log.WarnFormat("could not get: {0}", key);
                 throw;
+            }
+            finally
+            {
+                if (pipe != null)
+                    pipe.Dispose();               
             }
 		    return rc;
 		}
@@ -185,56 +141,53 @@ namespace NHibernate.Caches.Redis
         /// </summary>
         /// <param name="key"></param>
         /// <param name="value"></param>
-        public void Put(object key, object value)
+        public override void Put(CachePutParameters putParameters)
 		{
-			if (key == null)
-			{
-				throw new ArgumentNullException("key", "null key not allowed");
-			}
-			if (value == null)
-			{
-				throw new ArgumentNullException("value", "null value not allowed");
-			}
+            var key = putParameters.Key;
+            var value = putParameters.Value;
 
+			if (key == null)
+				throw new ArgumentNullException("key", "null key not allowed");
+			if (value == null)
+				throw new ArgumentNullException("value", "null value not allowed");
 			if (Log.IsDebugEnabled)
-			{
 				Log.DebugFormat("setting value for item {0}", key);
-			}
 
             try
             {
-                using (var disposable = new DisposableClient(_clientManager))
+                using (var disposable = new PooledRedisClientManager.DisposablePooledClient<SerializingRedisClient>(ClientManager))
                 {
-                    CustomRedisClient client = disposable.Client;
+                    var client = disposable.Client;
                     var bytes = client.Serialize(value);
                     //do transactioned get of generation and value
                     //if it succeeds, and null is returned, then either the key doesn't exist or
                     // our generation is out of date. In the latter case , update generation and try
                     // again.
-                    var generationFromServer = GetGeneration();
+                    long generationFromServer = CacheNamespace.GetGeneration();
                     while (true)
                     {
                         using (var trans = client.CreateTransaction())
                         {
-                            var globalKey = _cacheNamespace.GlobalKey(key, 0);
-                            trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
-                                               x => generationFromServer = Convert.ToInt32(x));
-                            trans.QueueCommand(r => ((IRedisNativeClient) r).SetEx(globalKey, _expiry, bytes));
+                            trans.QueueCommand(r => ((IRedisNativeClient)r).SetEx(CacheNamespace.GlobalCacheKey(key),
+                                                                _expiry, bytes));
 
                             //add key to globalKeys set for this namespace
-                            trans.QueueCommand(r => r.AddItemToSet(_cacheNamespace.GetGlobalKeysKey(), globalKey));
+                            trans.QueueCommand(r => r.AddItemToSet(CacheNamespace.GetGlobalKeysKey(),
+                                                                CacheNamespace.GlobalCacheKey(key)));
+
+                            trans.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()),
+                                                             x => generationFromServer = Convert.ToInt64(x));
                             trans.Commit();
                         }
-                        if (generationFromServer != GetGeneration())
+                        if (generationFromServer != CacheNamespace.GetGeneration())
                         {
                             //update cached generation value, and try again
-                            _cacheNamespace.SetGeneration(generationFromServer);
+                            CacheNamespace.SetGeneration(generationFromServer);
                         }
                         else
                             break;
                     }
                 }
-
             }
             catch (Exception)
             {
@@ -242,235 +195,299 @@ namespace NHibernate.Caches.Redis
                 throw;
             }
        	}
-        /*
+
+ 
+   
         /// <summary>
         /// Puts a LockedCacheableItem corresponding to (value, version) into
         /// the cache
         /// </summary>
-        /// <param name="key"></param>
-        /// <param name="value"></param>
-        /// <param name="version"></param>
-        /// <param name="versionComparator"></param>
-        public void Put(object key, object value, object version, IComparer versionComparator)
+        /// <param name="putParameters"></param>
+        public override void Put(IList<CacheVersionedPutParameters> putParameters)
         {
-            if (key == null)
+            //deal with null keys
+            IList<ScratchCacheItem> scratchItems = new List<ScratchCacheItem>();
+            foreach (var putParams in putParameters)
             {
-                return;
+                if (putParams.Key == null) continue;
+                scratchItems.Add(new ScratchCacheItem(putParams));
             }
-            if (Log.IsDebugEnabled)
-            {
-                Log.DebugFormat("fetching object {0} from the cache", key);
-            }
-            byte[] maybeObj = null;
+            if (scratchItems.Count == 0)  return;
+
+            byte[][] currentItemsRaw = null;
             IRedisPipeline pipe = null;
-            IRedisTransaction trans = null;
             try
             {
-                using (var disposable = new DisposableClient(_clientManager))
+                using (var disposable = new PooledRedisClientManager.DisposablePooledClient<SerializingRedisClient>(ClientManager))
                 {
-                    CustomRedisClient client = disposable.Client;
+                    var client = disposable.Client;
 
-                    //watch for changes to generation key and cache key
-                    client.Watch(_cacheNamespace.GetGenerationKey(), 
-                                    _cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey));
-
-                    long generationFromServer = -1;
+                    long generationFromServer = CacheNamespace.GetGeneration();
 
                     pipe = client.CreatePipeline();
-                    pipe.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
-                                       x => generationFromServer = Convert.ToInt32(x));
-                    pipe.QueueCommand(r => ((RedisNativeClient)r).Get(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey)),
-                                       x => maybeObj = x);
+
+                    //watch for changes to generation key and cache key
+                    IList<ScratchCacheItem> items = scratchItems;
+                    pipe.QueueCommand(r => ((RedisClient)r).Watch(WatchKeys(items, true)));
+
+                    //get all of the current objects
+                    pipe.QueueCommand(r => ((RedisNativeClient)r).MGet(Keys(items, false)), x => currentItemsRaw = x);
+
+                    pipe.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()), x => generationFromServer = Convert.ToInt64(x));
                     pipe.Flush();
 
                     //make sure generation is correct before analyzing cache item
-                    while (generationFromServer != GetGeneration())
+                    while (generationFromServer != CacheNamespace.GetGeneration())
                     {
                         //update cached generation value, and try again
-                        _cacheNamespace.SetGeneration(generationFromServer);
+                        CacheNamespace.SetGeneration(generationFromServer);
+
                         pipe.Replay();
                     }
 
-                    // check if can we can put this new (value, version) into the cache
-                    LockableCachedItem item = generateNewCachedItem(maybeObj, value, version, versionComparator, client);
-                    if (item == null)
+                    // check if there is a new value to put
+                    scratchItems = GenerateNewCacheItems(currentItemsRaw, scratchItems, client);
+                    if (scratchItems.Count == 0)
                         return;
-                    _bytesToCache = client.Serialize(item);
+
+                    bool success;
 
                     // put new item in cache
-                    trans = client.CreateTransaction();
-                    trans.QueueCommand(r => r.GetValue(_cacheNamespace.GetGenerationKey()),
-                                       x => generationFromServer = Convert.ToInt32(x));
-                    trans.QueueCommand(r => ((IRedisNativeClient) r).SetEx(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey),
-                                                        _expiry, NewCachedItemBytes()));
+                    using (var trans = client.CreateTransaction())
+                    {
+                        foreach (var scratch in scratchItems)
+                        {
+                            //setex on all new objects
+                            ScratchCacheItem item = scratch;
+                            trans.QueueCommand(
+                                r =>
+                                ((IRedisNativeClient) r).SetEx(
+                                    CacheNamespace.GlobalCacheKey(item.PutParameters.Key),
+                                    _expiry, client.Serialize(item.NewCacheValue)));
 
-                    //add key to globalKeys set for this namespace
-                    trans.QueueCommand(r => r.AddItemToSet(_cacheNamespace.GetGlobalKeysKey(), 
-                        _cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey)));
-                    bool success = trans.Commit(); ;
+                            //add keys to globalKeys set for this namespace
+                            trans.QueueCommand(r => r.AddItemToSet(CacheNamespace.GetGlobalKeysKey(),
+                                                                   CacheNamespace.GlobalCacheKey(
+                                                                       item.PutParameters.Key)));
+                        }
+
+                        trans.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()),
+                                           x => generationFromServer = Convert.ToInt64(x));
+                        success = trans.Commit();
+                    }
+                    
                     while (!success)
                     {
-                        client.Watch(_cacheNamespace.GetGenerationKey(), 
-                            _cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey));
-
                         pipe.Replay();
 
                         //make sure generation is correct before analyzing cache item
-                        while (generationFromServer != GetGeneration())
+                        while (generationFromServer != CacheNamespace.GetGeneration())
                         {
                             //update cached generation value, and try again
-                            _cacheNamespace.SetGeneration(generationFromServer);
+                            CacheNamespace.SetGeneration(generationFromServer);
+
                             pipe.Replay();
                         }
 
-                        item = generateNewCachedItem(maybeObj, value, version, versionComparator, client);
-                        if (item == null)
+                        // check if there is a new value to put
+                        scratchItems = GenerateNewCacheItems(currentItemsRaw, scratchItems, client);
+                        if (scratchItems.Count == 0)
                             return;
-                        _bytesToCache = client.Serialize(item);
-                         success = trans.Replay();
+
+                        // put new item in cache
+                        using (var trans = client.CreateTransaction())
+                        {
+                            foreach (var scratch in scratchItems)
+                            {
+                                //setex on all new objects
+                                ScratchCacheItem item = scratch;
+                                trans.QueueCommand(
+                                    r =>
+                                    ((IRedisNativeClient)r).SetEx(
+                                        CacheNamespace.GlobalCacheKey(item.PutParameters.Key),
+                                        _expiry, client.Serialize(item.NewCacheValue)));
+
+                                //add keys to globalKeys set for this namespace
+                                trans.QueueCommand(r => r.AddItemToSet(CacheNamespace.GetGlobalKeysKey(),
+                                                                       CacheNamespace.GlobalCacheKey(
+                                                                           item.PutParameters.Key)));
+                            }
+
+                            trans.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()),
+                                               x => generationFromServer = Convert.ToInt64(x));
+                            success = trans.Commit();
+                        }
                     }
 
                     // if we get here, we know that the generation has not been changed
                     // otherwise, the WATCH would have failed the transaction
-                    _cacheNamespace.SetGeneration(generationFromServer);
+                    CacheNamespace.SetGeneration(generationFromServer);
                 }
             }
             catch (Exception)
             {
-                Log.WarnFormat("could not get: {0}", key);
+                foreach (var putParams in putParameters)
+                {
+                    Log.WarnFormat("could not get: {0}", putParams.Key);
+                }
+                
                 throw;
             }
             finally
             {
                 if (pipe != null)
                     pipe.Dispose();
-                if (trans != null)
-                    trans.Dispose();
             }
         }
 
-      
-        private byte[] NewCachedItemBytes()
-        {
-            return _bytesToCache;
-        }
-        /// <summary>
-        /// New cache item. Null return indicates that we are not allowed to update the cache, due to versioning
-        /// </summary>
-        /// <param name="maybeObj"></param>
-        /// <param name="value"></param>
-        /// <param name="version"></param>
-        /// <param name="versionComparator"></param>
-        /// <param name="client"></param>
-        /// <returns></returns>
-        private LockableCachedItem generateNewCachedItem(byte[] maybeObj, object value, object version, IComparer versionComparator, CustomRedisClient client)
-        {
-            LockableCachedItem newItem = null;
-            object currentObject = maybeObj == null ? null : client.Deserialize(maybeObj);
-            var currentLockableCachedItem = currentObject as LockableCachedItem;
-            // this should never happen....
-            if (currentObject != null && currentLockableCachedItem == null)
-                throw new NHRedisException();
-            if (currentLockableCachedItem == null)
-                 newItem = new LockableCachedItem(value, version);
-            else if (currentLockableCachedItem.IsPuttable(0, version, versionComparator) )
-            {
-                currentLockableCachedItem.Update(value, version, versionComparator);
-                newItem = currentLockableCachedItem;
-            }
-            return newItem;
-            
-        }
-         */
-
+  
         /// <summary>
         /// Remove item corresponding to key from cache
         /// </summary>
         /// <param name="key"></param>
-        public void Remove(object key)
+        public override void Remove(object key)
 		{
 			if (key == null)
-			{
 				throw new ArgumentNullException("key");
-			}
 			if (Log.IsDebugEnabled)
-			{
 				Log.DebugFormat("removing item {0}", key);
-			}
+            IRedisPipeline pipe = null;
             try
             {
-                using (var disposable = new DisposableClient(_clientManager))
+                using (var disposable = new PooledRedisClientManager.DisposablePooledClient<SerializingRedisClient>(ClientManager))
                 {
-                    disposable.Client.Del(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey));
+                    var client = disposable.Client;
+                    long generationFromServer = CacheNamespace.GetGeneration();
+                    pipe = client.CreatePipeline();
+
+                    pipe.QueueCommand(r => ((RedisNativeClient)r).Del(CacheNamespace.GlobalCacheKey(key)));
+                    pipe.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()),
+                                       x => generationFromServer = Convert.ToInt64(x));
+                    pipe.Flush();
+
+                    while (generationFromServer != CacheNamespace.GetGeneration())
+                    {
+                        //update cached generation value, and try again
+                        CacheNamespace.SetGeneration(generationFromServer);
+
+                        pipe.Replay();
+                    }
                 }
             }
             catch (Exception)
             {
                 Log.WarnFormat("could not delete key: {0}", key);
                 throw;
-
-            }           
+            }  
+            finally
+            {
+                if (pipe != null)
+                    pipe.Dispose();
+            }
 		}
  
         /// <summary>
         /// clear cache region
         /// </summary>
-		public void Clear()
+        public override void Clear()
 		{
             //rename set of keys, and Start expiring the keys
-            using (var disposable = new DisposableClient(_clientManager))
+            using (var disposable = new PooledRedisClientManager.DisposablePooledClient<SerializingRedisClient>(ClientManager))
             {
-                CustomRedisClient client = disposable.Client;
+                var client = disposable.Client;
                 using (var trans = client.CreateTransaction())
                 {
                     trans.QueueCommand(
-                        r => r.IncrementValue(_cacheNamespace.GetGenerationKey()), x =>  _cacheNamespace.SetGeneration(x) );
-                    var temp = "temp_" + _cacheNamespace.GetGlobalKeysKey() + "_" + GetGeneration();
-                    trans.QueueCommand(r => ((RedisNativeClient) r).Rename(_cacheNamespace.GetGlobalKeysKey(), temp), null, e => Log.Debug(e) );
+                        r => r.IncrementValue(CacheNamespace.GetGenerationKey()), x =>  CacheNamespace.SetGeneration(x) );
+                    var temp = "temp_" + CacheNamespace.GetGlobalKeysKey() + "_" + CacheNamespace.GetGeneration();
+                    trans.QueueCommand(r => ((RedisNativeClient) r).Rename(CacheNamespace.GetGlobalKeysKey(), temp), null, e => Log.Debug(e) );
                     trans.QueueCommand(r => r.AddItemToList(RedisNamespace.NamespacesGarbageKey, temp));
                     trans.Commit();
                 }
+
             }
-		}
-        /// <summary>
-        /// 
-        /// </summary>
-		public void Destroy()
-		{
-			Clear();
-		}
+        }
+
         /// <summary>
         /// 
         /// </summary>
         /// <param name="key"></param>
-		public void Lock(object key)
-		{
+        public override bool Lock(object key)
+        {
+
+          //BROKEN /////////////////////////////////////
+          /*  IRedisPipeline pipe = null;
+            bool rc = false;
             try
             {
-                using (var disposable = new DisposableClient(_clientManager))
+                using (var disposable = new PooledRedisClientManager.DisposablePooledClient<SerializingRedisClient>(ClientManager))
                 {
-                    disposable.Client.Lock(_cacheNamespace.GlobalKey(key,RedisNamespace.NumTagsForLockKey));
+                    var client = disposable.Client;
+                    long generationFromServer = CacheNamespace.GetGeneration();
+                    pipe = client.CreatePipeline();
+
+                    pipe.QueueCommand(
+                        r =>
+                        ((SerializingRedisClient)r).Lock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey), _lockAcquisitionTimeout, _lockTimeout),
+                            x => rc = (x != 0));
+                    pipe.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()),
+                                      x => generationFromServer = Convert.ToInt64(x));
+                    pipe.Flush();
+
+                    while (generationFromServer != CacheNamespace.GetGeneration())
+                    {
+                        //update cached generation value, and try again
+                        CacheNamespace.SetGeneration(generationFromServer);
+
+                        pipe.Replay();
+                    }
                 }
             }
             catch (Exception)
             {
                 Log.WarnFormat("could not acquire lock for key: {0}", key);
                 throw;
-
             }
-		}
+            finally
+            {
+                if (pipe != null)
+                    pipe.Dispose();
+            }
+            return rc;*/
+            return false;
+        }
+
         /// <summary>
         /// 
         /// </summary>
         /// <param name="key"></param>
-		public void Unlock(object key)
-		{
-            
+        public override void Unlock(object key)
+        {
+            if (!AcquiredLocks.ContainsKey(key))
+                return;
+            IRedisPipeline pipe = null;
             try
             {
-                using (var disposable = new DisposableClient(_clientManager))
+                using (var disposable = new PooledRedisClientManager.DisposablePooledClient<SerializingRedisClient>(ClientManager))
                 {
-                    disposable.Client.Unlock(_cacheNamespace.GlobalKey(key,RedisNamespace.NumTagsForLockKey));
+                    var client = disposable.Client;
+                    long generationFromServer = CacheNamespace.GetGeneration();
+                    pipe = client.CreatePipeline();
+
+                    pipe.QueueCommand(
+                        r =>
+                        ((SerializingRedisClient)r).Unlock(CacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForLockKey), AcquiredLocks[key]));
+                    pipe.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()),
+                                      x => generationFromServer = Convert.ToInt64(x));
+                    pipe.Flush();
+
+                    while (generationFromServer != CacheNamespace.GetGeneration())
+                    {
+                        //update cached generation value, and try again
+                        CacheNamespace.SetGeneration(generationFromServer);
+
+                        pipe.Replay();
+                    }
                 }
             }
             catch (Exception)
@@ -478,76 +495,79 @@ namespace NHibernate.Caches.Redis
                 Log.WarnFormat("could not release lock for key: {0}", key);
                 throw;
             }
-             
-		}
-   
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <returns></returns>
-        public IDisposable GetReadLock()
-        {
-            return null;
+            finally
+            {
+                if (pipe != null)
+                    pipe.Dispose();
+            }
         }
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <returns></returns>
-        public IDisposable GetWriteLock()
-        {
-            return null;
-        }
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <returns></returns>
-        public long NextTimestamp()
-		{
-			return Timestamper.Next();
-		}
-        /// <summary>
-        /// 
-        /// </summary>
-		public int Timeout
-		{
-			get { return Timestamper.OneMs*60000; }
-		}
-        /// <summary>
-        /// 
-        /// </summary>
-		public string RegionName
-		{
-			get { return _region; }
-		}
 
         /// <summary>
         /// Return a dictionary of (key,value) pairs corresponding to a collection of keys
         /// </summary>
         /// <param name="keys"></param>
         /// <returns></returns>
-        public IDictionary MultiGet(IEnumerable keys)
+        public override IDictionary MultiGet(IEnumerable keys)
         {
-            var rc = new Dictionary<object,object>();
-            using (var disposable = new DisposableClient(_clientManager))
+            var rc = new Dictionary<object, object>();
+            using (var disposable = new PooledRedisClientManager.DisposablePooledClient<SerializingRedisClient>(ClientManager))
             {
                 var client = disposable.Client;
-                var globalKeys = new List<string>();
-                //generate global keys
-                int keyCount = 0;
-                foreach (var key in keys)
+
+                long generationFromServer = CacheNamespace.GetGeneration();
+                byte[][] resultBytesArray = null;
+                var keyCount = 0;
+                using (var pipe = client.CreatePipeline())
                 {
-                    keyCount++;
-                    globalKeys.Add(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey));
+                    var globalKeys = new List<string>();
+
+                    //generate global keys
+                    foreach (var key in keys)
+                    {
+                        keyCount++;
+                        globalKeys.Add(CacheNamespace.GlobalCacheKey(key));
+                    }
+
+                    pipe.QueueCommand(r => ((RedisNativeClient) r).MGet(globalKeys.ToArray()),
+                                      x => resultBytesArray = x);
+
+                    pipe.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()),
+                                      x => generationFromServer = Convert.ToInt64(x));
+                    pipe.Flush();
+
                 }
-                // do multi get
-                var resultBytesArray = client.MGet(globalKeys.ToArray());
+                while (generationFromServer != CacheNamespace.GetGeneration())
+                {
+                    //update cached generation value, and try again
+                    CacheNamespace.SetGeneration(generationFromServer);
+
+                    using (var pipe = client.CreatePipeline())
+                    {
+                        var globalKeys = new List<string>();
+
+                        //generate global keys
+                        keyCount = 0;
+                        foreach (var key in keys)
+                        {
+                            keyCount++;
+                            globalKeys.Add(CacheNamespace.GlobalCacheKey(key));
+                        }
+
+                        pipe.QueueCommand(r => ((RedisNativeClient)r).MGet(globalKeys.ToArray()),
+                                          x => resultBytesArray = x);
+
+                        pipe.QueueCommand(r => r.GetValue(CacheNamespace.GetGenerationKey()),
+                                          x => generationFromServer = Convert.ToInt64(x));
+                        pipe.Flush();
+                    }
+                }
                 if (keyCount != resultBytesArray.Length)
-                    throw new RedisException("Prefetch: number of results does not match number of keys");
+                    throw new RedisException("MultiGet: number of results does not match number of keys");
 
                 //process results
-                IEnumerator iter = keys.GetEnumerator();   
+                var iter = keys.GetEnumerator();
                 iter.MoveNext();
-                foreach (byte[] resultBytes in resultBytesArray)
+                foreach (var resultBytes in resultBytesArray)
                 {
                     if (resultBytes != null)
                     {
@@ -557,87 +577,36 @@ namespace NHibernate.Caches.Redis
                     }
                     iter.MoveNext();
                 }
-            }
-            return rc;
-        }
-        public IEnumerable SMembers(object key)
-        {
-            using (var disposable = new DisposableClient(_clientManager))
-            {
-                var members = disposable.Client.SMembers(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey));
-                IList rc = new ArrayList();
-                foreach(byte[] item in members)
-                {
-                    rc.Add(disposable.Client.Deserialize(item));
-                }
                 return rc;
             }
-            
-        }
-        public bool SAdd(object key, object value)
-        {
-            int rc = 0;
-            using (var disposable = new DisposableClient(_clientManager))
-            {
-                byte[] bytes = disposable.Client.Serialize(value);
-                rc = disposable.Client.SAdd(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey),bytes);
-            }
-            return rc == 1;
-        }
-
-        public bool SRemove(object key, object value)
-        {
-            int rc = 0;
-            using (var disposable = new DisposableClient(_clientManager))
-            {
-                byte[] bytes = disposable.Client.Serialize(value);
-                rc = disposable.Client.SRem(_cacheNamespace.GlobalKey(key, RedisNamespace.NumTagsForKey), bytes);
-            }
-            return rc == 1;
         }
 
         #endregion
 
 
-        /// <summary>
-        /// get value for cache _region _expiry
-        /// </summary>
-        /// <param name="props"></param>
-        /// <returns></returns>
-		private static string GetExpirationString(IDictionary<string, string> props)
-		{
-			string result;
-			if (!props.TryGetValue("expiration", out result))
-			{
-				props.TryGetValue(Environment.CacheDefaultExpiration, out result);
-			}
-			return result;
-		}
-
 
 
         /// <summary>
-        /// return cache _region generation
+        /// 
         /// </summary>
-        /// <returns></returns>
-        private long GetGeneration()
+        public override void Destroy()
         {
-            SynchGeneration();
-            return _cacheNamespace.GetGeneration();
+            Clear();
         }
  
         /// <summary>
         /// hit server for cache _region generation
         /// </summary>
         /// <returns></returns>
-        private int FetchGeneration()
+        private long FetchGeneration()
         {
-            int rc = 0;
-            using (var disposable = new DisposableClient(_clientManager))
+            using (var disposable = new PooledRedisClientManager.DisposablePooledClient<SerializingRedisClient>(ClientManager))
             {
-                rc = disposable.Client.FetchGeneration(_cacheNamespace.GetGenerationKey());
+                var generationKey = CacheNamespace.GetGenerationKey();
+                var client = disposable.Client;
+                var val = client.GetValue(generationKey);
+                return (val == null) ? client.Incr(generationKey) : Convert.ToInt64(val);
             }
-            return rc;
         }
 
         /// <summary>
@@ -645,9 +614,9 @@ namespace NHibernate.Caches.Redis
         /// </summary>
         private void SynchGeneration()
         {
-            if (_cacheNamespace.GetGeneration() == -1 && _clientManager != null)
+            if (CacheNamespace.GetGeneration() == -1 && ClientManager != null)
             {
-                _cacheNamespace.SetGeneration(FetchGeneration());
+                CacheNamespace.SetGeneration(FetchGeneration());
             }
         }
 	}

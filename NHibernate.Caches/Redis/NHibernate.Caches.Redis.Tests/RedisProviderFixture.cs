@@ -54,28 +54,28 @@ namespace NHibernate.Caches.Redis.Tests
 		[Test]
 		public void TestBuildCacheFromConfig()
 		{
-			var cache = _provider.BuildCache("foo", null);
+			var cache = _provider.BuildCache("foo", null, null, null);
 			Assert.IsNotNull(cache, "pre-configured cache not found");
 		}
 
 		[Test]
 		public void TestBuildCacheNullNull()
 		{
-			var cache = _provider.BuildCache(null, null);
+			var cache = _provider.BuildCache(null, null, null, null);
 			Assert.IsNotNull(cache, "no cache returned");
 		}
 
 		[Test]
 		public void TestBuildCacheStringICollection()
 		{
-			var cache = _provider.BuildCache("another_region", _props);
+			var cache = _provider.BuildCache("another_region", null, null,_props);
 			Assert.IsNotNull(cache, "no cache returned");
 		}
 
 		[Test]
 		public void TestBuildCacheStringNull()
 		{
-			var cache = _provider.BuildCache("a_region", null);
+			var cache = _provider.BuildCache("a_region", null, null, null);
 			Assert.IsNotNull(cache, "no cache returned");
 		}
 

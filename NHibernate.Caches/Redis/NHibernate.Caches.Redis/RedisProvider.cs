@@ -24,12 +24,13 @@
 
 #endregion
 
-using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Text;
+using NHibernate.Cache.Query;
 using ServiceStack.Redis;
 using NHibernate.Cache;
+using ServiceStack.Redis.Support.Queue.Implementation;
 
 namespace NHibernate.Caches.Redis
 {
@@ -43,7 +44,11 @@ namespace NHibernate.Caches.Redis
         private PooledRedisClientManager _clientManager;
 		private static readonly object SyncObject = new object();
 
-        private static readonly RedisGarbageCollector GarbageCollector;
+        private static RedisGarbageCollector _garbageCollector;
+
+
+
+        public static string NoClearPropertyKey = "no_clear_on_client";
 
 		static RedisProvider()
 		{
@@ -54,13 +59,13 @@ namespace NHibernate.Caches.Redis
 				Log.Info("redis configuration section not found, using default configuration (127.0.0.1:6379).");
 				Config = new RedisConfig("localhost",6379);
     		}
-            GarbageCollector = new RedisGarbageCollector(Config.Host, Config.Port);
+           
 
 		}
 
 		#region ICacheProvider Members
 
-		public ICache BuildCache(string regionName, IDictionary<string, string> properties)
+		public ICache BuildCache(string regionName, IInMemoryQueryProvider inMemoryQueryProvider, string cacheConcurrencyStrategy, IDictionary<string, string> properties)
 		{
 			if (regionName == null)
 			{
@@ -84,9 +89,19 @@ namespace NHibernate.Caches.Redis
 				Log.Debug("building cache with region: " + regionName + ", properties: " + sb);
 			}
 
-
-            return new NhRedisClient(regionName, properties, _clientManager);
+		    var noClearClient = true;
+            if (properties.ContainsKey(NoClearPropertyKey))
+                noClearClient = properties[NoClearPropertyKey] == "true";
+          
+            if (noClearClient)
+                return new NhRedisClientNoClear(regionName,inMemoryQueryProvider, cacheConcurrencyStrategy, properties, _clientManager);
+            return new NhRedisClient(regionName, inMemoryQueryProvider,cacheConcurrencyStrategy, properties, _clientManager);
 		}
+
+        public ILiveQueryCache BuildLiveQueryCache(string regionName, IDictionary<string, string> properties)
+        {
+            return BuildCache(regionName, null, null, properties) as ILiveQueryCache;
+        }		
 
 		public long NextTimestamp()
 		{
@@ -101,24 +116,33 @@ namespace NHibernate.Caches.Redis
 			{
 				if (Config == null)
 				{
-					throw new ConfigurationErrorsException("Configuration for enyim.com/memcached not found");
+					throw new ConfigurationErrorsException("Configuration for NHRedis not found");
 				}
 
 
                 if (_clientManager == null)
                 {
 
-                    RedisClientManagerConfig poolConfig = new RedisClientManagerConfig();
-                    poolConfig.MaxReadPoolSize = Config.MaxReadPoolSize;
-                    poolConfig.MaxWritePoolSize = Config.MaxWritePoolSize;
+                    var poolConfig = new RedisClientManagerConfig
+                                         {
+                                             MaxReadPoolSize = Config.MaxReadPoolSize,
+                                             MaxWritePoolSize = Config.MaxWritePoolSize
+                                         };
 
-                    List<string> readWrite = new List<string>() { Config.Host };
                     _clientManager = new PooledRedisClientManager(new List<string>() { Config.Host },
-                                                    new List<string>(), poolConfig);
-                    _clientManager.RedisClientFactory = new CustomRedisClientFactory();
-
+                                                    new List<string>(), poolConfig)
+                                         {
+                                             RedisClientFactory = new SerializingRedisClientFactory()
+                                         };
                 }
-                GarbageCollector.Start();
+                if (_garbageCollector == null)
+                {
+                   // Note: garbage collections disabled because we are using the optimized NHRedis client that
+                   // never clears, so no gc needed
+                   // _garbageCollector = new RedisGarbageCollector(Config.Host, Config.Port);
+                   // _garbageCollector.Start();
+                }
+               
 			}
 		}
 
@@ -129,7 +153,12 @@ namespace NHibernate.Caches.Redis
                 _clientManager.Dispose();
                 _clientManager = null;
 
-                GarbageCollector.Stop();
+                if (_garbageCollector != null)
+                {
+                    _garbageCollector.Stop();
+                    _garbageCollector = null;      
+                }
+  
 			}
 		}
 

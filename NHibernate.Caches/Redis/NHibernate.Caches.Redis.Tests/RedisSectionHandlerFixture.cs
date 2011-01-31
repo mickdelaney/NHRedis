@@ -48,7 +48,7 @@ namespace NHibernate.Caches.Redis.Tests
 
 		private RedisSectionHandler _handler;
 		private XmlNode _section;
-        private const string Xml = "<redis><redis host=\"142.223.144.62\" port=\"6379\" /></redis>";
+        private const string Xml = "<redis><redis host=\"localhost\" port=\"6379\" /></redis>";
 
 		[Test]
 		public void TestGetConfigFromFile()
