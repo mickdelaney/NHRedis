@@ -6,7 +6,7 @@ OUTPUT_DIR = File.join(PROJECT_DIR, 'Output')
 SOLUTION_FILE = "NHibernate.Caches/NHibernate.Caches.Everything.sln"
 
 MSBUILD = "C:/Windows/Microsoft.NET/Framework/v4.0.30319/MSBuild.exe"
-NUNIT = "#{PROJECT_DIR}/tools/nunit/nunit-console.exe"
+NUNIT = "#{PROJECT_DIR}/NHibernate.Caches/packages/NUnit.2.5.10.11092/tools/nunit-console.exe"
 
 raise "NUNIT exe not found at #{NUNIT}" unless File.exists? NUNIT
 raise "MSBUILD exe not found at #{MSBUILD}" unless File.exists? MSBUILD
