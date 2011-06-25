@@ -72,7 +72,6 @@ nuspec :create_spec do |nuspec|
    nuspec.projectUrl = "https://github.com/boxerab/NHRedis"
    
    nuspec.dependency "ServiceStack.Redis", "2.20"
-   nuspec.dependency "ServiceStack.Text", "2.26"
    nuspec.dependency "Iesi.Collections", "3.2.0.2002"
    nuspec.dependency "NHibernate", "3.1.0.4000"
    nuspec.dependency "log4net", "1.2.10"

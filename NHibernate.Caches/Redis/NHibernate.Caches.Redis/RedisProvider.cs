@@ -118,17 +118,16 @@ namespace NHibernate.Caches.Redis
                 if (_clientManager == null)
                 {
 
-                    var poolConfig = new RedisClientManagerConfig
-                                         {
-                                             MaxReadPoolSize = Config.MaxReadPoolSize,
-                                             MaxWritePoolSize = Config.MaxWritePoolSize
-                                         };
+					var poolConfig = new RedisClientManagerConfig
+					{
+						MaxReadPoolSize = Config.MaxReadPoolSize,
+						MaxWritePoolSize = Config.MaxWritePoolSize
+					};
 
-                    _clientManager = new PooledRedisClientManager(new List<string>() { Config.Host },
-                                                    new List<string>(), poolConfig)
-                                         {
-                                             RedisClientFactory = new SerializingRedisClientFactory()
-                                         };
+                    _clientManager = new PooledRedisClientManager(new List<string>() { Config.Host }, new List<string>(), poolConfig)
+					{
+						RedisClientFactory = new SerializingRedisClientFactory()
+					};
                 }
                 if (_garbageCollector == null)
                 {
